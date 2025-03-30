@@ -3,7 +3,7 @@ package reader
 import (
 	"bytes"
 	"errors"
-	"idx/writer"
+	"github.com/globalmac/idx/writer"
 	"io"
 	"iter"
 	"math"
