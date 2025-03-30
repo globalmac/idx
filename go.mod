@@ -1,3 +1,3 @@
-module github.com/globalmac/idx
+module idx
 
 go 1.24
