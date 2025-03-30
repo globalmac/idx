@@ -3,7 +3,7 @@ package reader
 import (
 	"encoding/binary"
 	"fmt"
-	w "idx/writer"
+	"idx/writer"
 	"math"
 	"math/big"
 	"reflect"
@@ -25,7 +25,7 @@ func (d *dc) decode(offset uint, result reflect.Value, depth int) (uint, error) 
 		return 0, err
 	}
 
-	if typeNum != w.TypePointer && result.Kind() == reflect.Uintptr {
+	if typeNum != writer.TypePointer && result.Kind() == reflect.Uintptr {
 		result.Set(reflect.ValueOf(uintptr(offset)))
 		return d.nextValueOffset(offset, 1)
 	}
@@ -61,7 +61,7 @@ func (d *dc) decodePath(offset uint, path []any, result reflect.Value) error {
 PATH:
 	for i, v := range path {
 		var (
-			typeNum w.K3dt
+			typeNum writer.K3dt
 			size    uint
 			err     error
 		)
@@ -70,7 +70,7 @@ PATH:
 			return err
 		}
 
-		if typeNum == w.TypePointer {
+		if typeNum == writer.TypePointer {
 			pointer, _, err := d.decodePointer(size, offset)
 			if err != nil {
 				return err
@@ -85,7 +85,7 @@ PATH:
 		switch v := v.(type) {
 		case string:
 			// We are expecting a map
-			if typeNum != w.TypeMap {
+			if typeNum != writer.TypeMap {
 				// XXX - use type names in errors.
 				return fmt.Errorf("expected a map for %s but found %d", v, typeNum)
 			}
@@ -107,7 +107,7 @@ PATH:
 			return nil
 		case int:
 			// We are expecting an array
-			if typeNum != w.TypeSlice {
+			if typeNum != writer.TypeSlice {
 				// XXX - use type names in errors.
 				return fmt.Errorf("expected a slice for %d but found %d", v, typeNum)
 			}
@@ -137,19 +137,19 @@ PATH:
 	return err
 }
 
-func (d *dc) decodeCtrlData(offset uint) (w.K3dt, uint, uint, error) {
+func (d *dc) decodeCtrlData(offset uint) (writer.K3dt, uint, uint, error) {
 	newOffset := offset + 1
 	if offset >= uint(len(d.buffer)) {
 		return 0, 0, 0, newOffsetError()
 	}
 	ctrlByte := d.buffer[offset]
 
-	typeNum := w.K3dt(ctrlByte >> 5)
-	if typeNum == w.TypeExtended {
+	typeNum := writer.K3dt(ctrlByte >> 5)
+	if typeNum == writer.TypeExtended {
 		if newOffset >= uint(len(d.buffer)) {
 			return 0, 0, 0, newOffsetError()
 		}
-		typeNum = w.K3dt(d.buffer[newOffset] + 7)
+		typeNum = writer.K3dt(d.buffer[newOffset] + 7)
 		newOffset++
 	}
 
@@ -161,10 +161,10 @@ func (d *dc) decodeCtrlData(offset uint) (w.K3dt, uint, uint, error) {
 func (d *dc) sizeFromCtrlByte(
 	ctrlByte byte,
 	offset uint,
-	typeNum w.K3dt,
+	typeNum writer.K3dt,
 ) (uint, uint, error) {
 	size := uint(ctrlByte & 0x1f)
-	if typeNum == w.TypeExtended {
+	if typeNum == writer.TypeExtended {
 		return size, offset, nil
 	}
 
@@ -194,7 +194,7 @@ func (d *dc) sizeFromCtrlByte(
 }
 
 func (d *dc) decodeFromType(
-	dtype w.K3dt,
+	dtype writer.K3dt,
 	size uint,
 	offset uint,
 	result reflect.Value,
@@ -204,13 +204,13 @@ func (d *dc) decodeFromType(
 
 	// For these types, size has a special meaning
 	switch dtype {
-	case w.TypeBool:
+	case writer.TypeBool:
 		return unmarshalBool(size, offset, result)
-	case w.TypeMap:
+	case writer.TypeMap:
 		return d.unmarshalMap(size, offset, result, depth)
-	case w.TypePointer:
+	case writer.TypePointer:
 		return d.unmarshalPointer(size, offset, result, depth)
-	case w.TypeSlice:
+	case writer.TypeSlice:
 		return d.unmarshalSlice(size, offset, result, depth)
 	}
 
@@ -219,45 +219,45 @@ func (d *dc) decodeFromType(
 		return 0, newOffsetError()
 	}
 	switch dtype {
-	case w.TypeBytes:
+	case writer.TypeBytes:
 		return d.unmarshalBytes(size, offset, result)
-	case w.TypeFloat32:
+	case writer.TypeFloat32:
 		return d.unmarshalFloat32(size, offset, result)
-	case w.TypeFloat64:
+	case writer.TypeFloat64:
 		return d.unmarshalFloat64(size, offset, result)
-	case w.TypeInt32:
+	case writer.TypeInt32:
 		return d.unmarshalInt32(size, offset, result)
-	case w.TypeString:
+	case writer.TypeString:
 		return d.unmarshalString(size, offset, result)
-	case w.TypeUint16:
+	case writer.TypeUint16:
 		return d.unmarshalUint(size, offset, result, 16)
-	case w.TypeUint32:
+	case writer.TypeUint32:
 		return d.unmarshalUint(size, offset, result, 32)
-	case w.TypeUint64:
+	case writer.TypeUint64:
 		return d.unmarshalUint(size, offset, result, 64)
-	case w.TypeUint128:
+	case writer.TypeUint128:
 		return d.unmarshalUint128(size, offset, result)
 	default:
 		return 0, newDbError("unknown type: %d", dtype)
 	}
 }
 
-func (d *dc) decodeFromTypeToDeserializer(dtype w.K3dt, size uint, offset uint, dser deserializer, depth int) (uint, error) {
+func (d *dc) decodeFromTypeToDeserializer(dtype writer.K3dt, size uint, offset uint, dser deserializer, depth int) (uint, error) {
 	// For these types, size has a special meaning
 	switch dtype {
-	case w.TypeBool:
+	case writer.TypeBool:
 		v, offset := decodeBool(size, offset)
 		return offset, dser.Bool(v)
-	case w.TypeMap:
+	case writer.TypeMap:
 		return d.decodeMapToDeserializer(size, offset, dser, depth)
-	case w.TypePointer:
+	case writer.TypePointer:
 		pointer, newOffset, err := d.decodePointer(size, offset)
 		if err != nil {
 			return 0, err
 		}
 		_, err = d.decodeToDeserializer(pointer, dser, depth, false)
 		return newOffset, err
-	case w.TypeSlice:
+	case writer.TypeSlice:
 		return d.decodeSliceToDeserializer(size, offset, dser, depth)
 	}
 
@@ -266,31 +266,31 @@ func (d *dc) decodeFromTypeToDeserializer(dtype w.K3dt, size uint, offset uint, 
 		return 0, newOffsetError()
 	}
 	switch dtype {
-	case w.TypeBytes:
+	case writer.TypeBytes:
 		v, offset := d.decodeBytes(size, offset)
 		return offset, dser.Bytes(v)
-	case w.TypeFloat32:
+	case writer.TypeFloat32:
 		v, offset := d.decodeFloat32(size, offset)
 		return offset, dser.Float32(v)
-	case w.TypeFloat64:
+	case writer.TypeFloat64:
 		v, offset := d.decodeFloat64(size, offset)
 		return offset, dser.Float64(v)
-	case w.TypeInt32:
+	case writer.TypeInt32:
 		v, offset := d.decodeInt(size, offset)
 		return offset, dser.Int32(int32(v))
-	case w.TypeString:
+	case writer.TypeString:
 		v, offset := d.decodeString(size, offset)
 		return offset, dser.String(v)
-	case w.TypeUint16:
+	case writer.TypeUint16:
 		v, offset := d.decodeUint(size, offset)
 		return offset, dser.Uint16(uint16(v))
-	case w.TypeUint32:
+	case writer.TypeUint32:
 		v, offset := d.decodeUint(size, offset)
 		return offset, dser.Uint32(uint32(v))
-	case w.TypeUint64:
+	case writer.TypeUint64:
 		v, offset := d.decodeUint(size, offset)
 		return offset, dser.Uint64(v)
-	case w.TypeUint128:
+	case writer.TypeUint128:
 		v, offset := d.decodeUint128(size, offset)
 		return offset, dser.Uint128(v)
 	default:
@@ -868,7 +868,7 @@ func (d *dc) decodeKey(offset uint) ([]byte, uint, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	if typeNum == w.TypePointer {
+	if typeNum == writer.TypePointer {
 		pointer, ptrOffset, err := d.decodePointer(size, dataOffset)
 		if err != nil {
 			return nil, 0, err
@@ -876,7 +876,7 @@ func (d *dc) decodeKey(offset uint) ([]byte, uint, error) {
 		key, _, err := d.decodeKey(pointer)
 		return key, ptrOffset, err
 	}
-	if typeNum != w.TypeString {
+	if typeNum != writer.TypeString {
 		return nil, 0, newDbError("unexpected type when decoding string: %v", typeNum)
 	}
 	newOffset := dataOffset + size
@@ -898,16 +898,16 @@ func (d *dc) nextValueOffset(offset, numberToSkip uint) (uint, error) {
 		return 0, err
 	}
 	switch typeNum {
-	case w.TypePointer:
+	case writer.TypePointer:
 		_, offset, err = d.decodePointer(size, offset)
 		if err != nil {
 			return 0, err
 		}
-	case w.TypeMap:
+	case writer.TypeMap:
 		numberToSkip += 2 * size
-	case w.TypeSlice:
+	case writer.TypeSlice:
 		numberToSkip += size
-	case w.TypeBool:
+	case writer.TypeBool:
 	default:
 		offset += size
 	}

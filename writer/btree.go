@@ -9,6 +9,7 @@ import (
 // BinaryTree представляет бинарное дерево для хранения данных
 type BinaryTree struct {
 	timestamp  int64    // Временная метка
+	name       string   // Название БД
 	storage    *storage // Хранилище данных
 	nodeSize   int      // Размер узла
 	root       *node    // Корневой узел
@@ -128,6 +129,7 @@ func (t *BinaryTree) writeMetadata(ds *dataSerializer) (int64, error) {
 	}
 	meta := DataMap{
 		"created_at": DataUint64(t.timestamp),
+		"name":       DataString(t.name),
 		"node_count": DataUint32(t.totalNodes),
 	}
 	return meta.Serialize(ds)
@@ -231,7 +233,7 @@ func (r *record) tryMerge(op insertOps) error {
 }
 
 // find ищет запись по ключу
-func (n *node) find(key uint32, depth int) (int, record) {
+func (n *node) find(key uint64, depth int) (int, record) {
 	r := n.children[getBit(key, depth)]
 	depth++
 
@@ -260,6 +262,6 @@ func (n *node) prepare(currentID int) int {
 }
 
 // getBit возвращает бит на указанной позиции
-func getBit(value uint32, pos int) byte {
-	return byte((value >> (31 - pos)) & 1)
+func getBit(value uint64, pos int) byte {
+	return byte((value >> (63 - pos)) & 1)
 }

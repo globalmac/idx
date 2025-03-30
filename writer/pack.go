@@ -80,7 +80,7 @@ type node struct {
 type insertOps struct {
 	mergeFunc  func(value DataItem) (DataItem, error) // Функция слияния
 	storage    *storage                               // Хранилище данных
-	key        uint32                                 // Ключ
+	key        uint64                                 // Ключ
 	prefixBits int                                    // Количество бит префикса
 	rType      recordType                             // Тип записи
 }
