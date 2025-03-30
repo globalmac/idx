@@ -3,7 +3,7 @@ package reader
 import (
 	"encoding/binary"
 	"fmt"
-	"idx/writer"
+	"github.com/globalmac/idx/writer"
 	"math"
 	"math/big"
 	"reflect"
