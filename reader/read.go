@@ -223,6 +223,8 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 		expectedKind = reflect.String
 	case uint32:
 		expectedKind = reflect.Uint32
+	case uint64:
+		expectedKind = reflect.Uint64
 	case int:
 		expectedKind = reflect.Int
 	case bool:
@@ -289,6 +291,10 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 								var val uint32
 								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
 								match = err == nil && val == fieldValue.(uint32)
+							case reflect.Uint64:
+								var val uint64
+								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
+								match = err == nil && val == fieldValue.(uint64)
 							}
 
 							if match {

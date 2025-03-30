@@ -101,6 +101,11 @@ if result.Exist() {
     fmt.Println(Record.ID, Record.Value)
 }
 
+_, err = db.Serialize(dbFile)
+if err != nil {
+    panic(err)
+}
+
 ```
 
 ### Комбинированный пример
