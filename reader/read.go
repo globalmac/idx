@@ -3,7 +3,7 @@ package reader
 import (
 	"bytes"
 	"errors"
-	w "idx/writer"
+	"idx/writer"
 	"io"
 	"iter"
 	"math"
@@ -28,20 +28,21 @@ type Reader struct {
 }
 
 type Metadata struct {
-	BuildEpoch uint `idx:"created_at"`
-	NodeCount  uint `idx:"node_count"`
+	Name       string `idx:"name"`
+	BuildEpoch uint   `idx:"created_at"`
+	NodeCount  uint   `idx:"node_count"`
 }
 
 type K3dt byte
 
 type treeNode struct {
-	id      uint32
+	id      uint64
 	bit     uint
 	pointer uint
 }
 
 type Result struct {
-	id     uint32
+	id     uint64
 	err    error
 	dc     dc
 	offset uint
@@ -72,7 +73,6 @@ func Open(file string) (*Reader, error) {
 	}
 
 	size := int(size64)
-	// Check for overflow.
 	if int64(size) != size64 {
 		return nil, errors.New("file too large")
 	}
@@ -104,13 +104,13 @@ func Open(file string) (*Reader, error) {
 
 // OpenRaw берет фрагмент байта, соответствующий файлу БД и возвращает структуру считывателя или ошибку.
 func OpenRaw(buffer []byte) (*Reader, error) {
-	metadataStart := bytes.LastIndex(buffer, w.HeaderMarker)
+	metadataStart := bytes.LastIndex(buffer, writer.HeaderMarker)
 
 	if metadataStart == -1 {
 		return nil, newDbError("ошибка при открытии файла БД - некорректный формат файла")
 	}
 
-	metadataStart += len(w.HeaderMarker)
+	metadataStart += len(writer.HeaderMarker)
 	metadataDecoder := dc{buffer: buffer[metadataStart:]}
 
 	var metadata Metadata
@@ -123,12 +123,12 @@ func OpenRaw(buffer []byte) (*Reader, error) {
 
 	searchTreeSize := metadata.NodeCount * (32 / 4)
 	dataSectionStart := searchTreeSize + sectionSeparatorSize
-	dataSectionEnd := uint(metadataStart - len(w.HeaderMarker))
+	dataSectionEnd := uint(metadataStart - len(writer.HeaderMarker))
 	if dataSectionStart > dataSectionEnd {
 		return nil, newDbError("файл БД содержит некорректный формат метаданных")
 	}
 	d := dc{
-		buffer: buffer[searchTreeSize+sectionSeparatorSize : metadataStart-len(w.HeaderMarker)],
+		buffer: buffer[searchTreeSize+sectionSeparatorSize : metadataStart-len(writer.HeaderMarker)],
 	}
 
 	nb := buffer[:searchTreeSize]
@@ -158,7 +158,7 @@ func (r *Reader) Close() error {
 }
 
 // Find возвращает 1 узел
-func (r *Reader) Find(id uint32) Result {
+func (r *Reader) Find(id uint64) Result {
 	if r.buffer == nil {
 		return Result{err: errors.New("БД недоступна для чтения")}
 	}
@@ -171,9 +171,9 @@ func (r *Reader) Find(id uint32) Result {
 	// Обход дерева
 	var node uint
 	var prefixLen uint8
-	for prefixLen = 0; prefixLen < 32 && node < nodeCount; prefixLen++ {
-		// Получаем бит на текущей позиции (0-31)
-		bit := (id >> (31 - prefixLen)) & 1
+	for prefixLen = 0; prefixLen < 64 && node < nodeCount; prefixLen++ {
+		// Получаем бит на текущей позиции (0-63)
+		bit := (id >> (63 - prefixLen)) & 1
 
 		offset := node * offsetMult
 		if bit == 0 {
@@ -235,13 +235,13 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 
 	var stack [64]struct {
 		node   uint
-		nodeID uint32
+		nodeID uint64
 		bit    uint8
 	}
 	stackSize := 1
 	stack[0] = struct {
 		node   uint
-		nodeID uint32
+		nodeID uint64
 		bit    uint8
 	}{node: 0, nodeID: 0, bit: 0}
 
@@ -267,7 +267,7 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 					continue
 				}
 
-				if typeNum == w.TypeMap {
+				if typeNum == writer.TypeMap {
 					found := false
 					currentOffset := newOffset
 					for i := uint(0); i < size; i++ {
@@ -324,19 +324,19 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 			leftPointer := r.nodeReader.readLeft(offset)
 			rightPointer := r.nodeReader.readRight(offset)
 
-			rightID := nodeID | (1 << (31 - bit))
+			rightID := nodeID | (1 << (63 - bit))
 			nextBit := bit + 1
 
 			stack[stackSize] = struct {
 				node   uint
-				nodeID uint32
+				nodeID uint64
 				bit    uint8
 			}{node: rightPointer, nodeID: rightID, bit: nextBit}
 			stackSize++
 
 			stack[stackSize] = struct {
 				node   uint
-				nodeID uint32
+				nodeID uint64
 				bit    uint8
 			}{node: leftPointer, nodeID: nodeID, bit: nextBit}
 			stackSize++
@@ -344,17 +344,17 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 	}
 }
 
-func (r *Reader) Scan(id uint32, prefixLen uint8) iter.Seq[Result] {
+func (r *Reader) Scan(id uint64, prefixLen uint8) iter.Seq[Result] {
 	return func(yield func(Result) bool) {
 
 		stopBit := int(prefixLen)
-		if stopBit > 32 {
-			stopBit = 32
+		if stopBit > 64 {
+			stopBit = 64
 		}
 
 		pointer, bit := r.traverseTree(id, 0, stopBit)
 
-		mask := uint32(0xFFFFFFFF) << (32 - bit)
+		mask := uint64(0xFFFFFFFF) << (64 - bit)
 		network := id & mask
 
 		nodes := []treeNode{{
@@ -387,7 +387,7 @@ func (r *Reader) Scan(id uint32, prefixLen uint8) iter.Seq[Result] {
 				}
 
 				// Создаем правую ветку с установленным битом
-				idRight := node.id | (1 << (31 - node.bit))
+				idRight := node.id | (1 << (62 - node.bit))
 
 				offset := node.pointer * r.nodeOffsetMult
 				rightPointer := r.nodeReader.readRight(offset)
@@ -405,7 +405,7 @@ func (r *Reader) Scan(id uint32, prefixLen uint8) iter.Seq[Result] {
 	}
 }
 
-func (r *Reader) GetRange(start, end uint32) iter.Seq[Result] {
+func (r *Reader) GetRange(start, end uint64) iter.Seq[Result] {
 	return func(yield func(Result) bool) {
 		if start > end {
 			return
@@ -419,13 +419,13 @@ func (r *Reader) GetRange(start, end uint32) iter.Seq[Result] {
 		// Фиксированный стек (достаточно для 32 уровней глубины)
 		var stack [64]struct {
 			node   uint
-			nodeID uint32
+			nodeID uint64
 			bit    uint8
 		}
 		stackSize := 1
 		stack[0] = struct {
 			node   uint
-			nodeID uint32
+			nodeID uint64
 			bit    uint8
 		}{node: 0, nodeID: 0, bit: 0}
 
@@ -436,7 +436,7 @@ func (r *Reader) GetRange(start, end uint32) iter.Seq[Result] {
 			node, nodeID, bit := item.node, item.nodeID, item.bit
 
 			// Вычисляем границы текущей сети
-			mask := ^uint32(0) << (32 - bit)
+			mask := ^uint64(0) << (64 - bit)
 			netStart := nodeID & mask
 			netEnd := netStart | ^mask
 
@@ -463,7 +463,7 @@ func (r *Reader) GetRange(start, end uint32) iter.Seq[Result] {
 
 			// Вычисляем адрес для правой ветки
 			rightBit := bit + 1
-			rightID := netStart | (1 << (31 - bit))
+			rightID := netStart | (1 << (63 - bit))
 
 			// Читаем указатели на потомков
 			offset := node * offsetMult
@@ -475,7 +475,7 @@ func (r *Reader) GetRange(start, end uint32) iter.Seq[Result] {
 				if stackSize < len(stack) {
 					stack[stackSize] = struct {
 						node   uint
-						nodeID uint32
+						nodeID uint64
 						bit    uint8
 					}{node: rightPointer, nodeID: rightID, bit: rightBit}
 					stackSize++
@@ -486,7 +486,7 @@ func (r *Reader) GetRange(start, end uint32) iter.Seq[Result] {
 				if stackSize < len(stack) {
 					stack[stackSize] = struct {
 						node   uint
-						nodeID uint32
+						nodeID uint64
 						bit    uint8
 					}{node: leftPointer, nodeID: netStart, bit: rightBit}
 					stackSize++
@@ -496,12 +496,12 @@ func (r *Reader) GetRange(start, end uint32) iter.Seq[Result] {
 	}
 }
 
-func (r *Reader) traverseTree(id uint32, node uint, stopBit int) (uint, int) {
+func (r *Reader) traverseTree(id uint64, node uint, stopBit int) (uint, int) {
 	nodeCount := r.Metadata.NodeCount
 
 	for i := 0; i < stopBit && node < nodeCount; i++ {
-		// Получаем бит на позиции i (0-31)
-		bit := (id >> (31 - i)) & 1
+		// Получаем бит на позиции i (0-63)
+		bit := (id >> (63 - i)) & 1
 
 		offset := node * r.nodeOffsetMult
 		if bit == 0 {

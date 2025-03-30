@@ -28,7 +28,7 @@ func (ds *dataSerializer) writeWithRef(e *dataEntry) (int, error) {
 	}
 
 	if pos > math.MaxUint32 {
-		return 0, fmt.Errorf("позиция %d превысила макс. допустимое значение", pos)
+		return 0, fmt.Errorf("position %d exceeds maximum allowed", pos)
 	}
 
 	stored = storedItem{

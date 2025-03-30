@@ -16,7 +16,7 @@ var (
 // Config содержит настройки для создания бинарного дерева
 type Config struct {
 	Timestamp int64       // Временная метка
-	NodeSize  int         // Размер узла
+	Name      string      // Название БД
 	KeyHasher KeyHashFunc // Функция хеширования ключей
 }
 
@@ -33,22 +33,23 @@ func New(cfg Config) (*BinaryTree, error) {
 		tree.timestamp = cfg.Timestamp
 	}
 
-	tree.storage = newStorage(newHashBuffer())
-
-	if cfg.NodeSize != 0 {
-		tree.nodeSize = cfg.NodeSize
+	if cfg.Name != "" {
+		tree.name = cfg.Name
 	}
+
+	tree.storage = newStorage(newHashBuffer())
+	//tree.nodeSize = 32
 
 	return tree, nil
 }
 
 // Insert добавляет новый элемент в дерево по ключу
-func (t *BinaryTree) Insert(key uint32, data DataItem) error {
+func (t *BinaryTree) Insert(key uint64, data DataItem) error {
 	t.totalNodes = 0
 	return t.root.insert(
 		insertOps{
 			key:        key,
-			prefixBits: 32,
+			prefixBits: 64,
 			rType:      recordData,
 			mergeFunc: func(value DataItem) MergeFunc {
 				return func(_ DataItem) (DataItem, error) {
@@ -62,12 +63,12 @@ func (t *BinaryTree) Insert(key uint32, data DataItem) error {
 }
 
 // Find ищет элемент в дереве по ключу
-func (t *BinaryTree) Find(key uint32) (uint32, DataItem) {
+func (t *BinaryTree) Find(key uint64) (uint64, DataItem) {
 	prefixBits, r := t.root.find(key, 0)
 
-	var mask uint32 = 0
+	var mask uint64 = 0
 	if prefixBits != 0 {
-		mask = ^uint32(0) << (32 - prefixBits)
+		mask = ^uint64(0) << (64 - prefixBits)
 	}
 	matched := key & mask
 
