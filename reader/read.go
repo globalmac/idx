@@ -287,14 +287,14 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 								var val string
 								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
 								match = err == nil && val == fieldValue.(string)
-							case reflect.Uint32:
-								var val uint32
-								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
-								match = err == nil && val == fieldValue.(uint32)
 							case reflect.Uint64:
 								var val uint64
 								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
 								match = err == nil && val == fieldValue.(uint64)
+							case reflect.Uint32:
+								var val uint32
+								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
+								match = err == nil && val == fieldValue.(uint32)
 							}
 
 							if match {
