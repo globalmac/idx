@@ -67,12 +67,43 @@ if err != nil {
     panic(err)
 }
 
-record := writer.DataMap{
-    "id":     writer.DataUint64(123),
-    "value":  writer.DataString("Привет!"),
+var i uint64
+for i = 1; i <= 10; i++ {
+
+    var record = writer.DataMap{
+        "id":    writer.DataUint64(i),
+        "value": writer.DataString("Привет!"),
+        "slice": writer.DataSlice{
+            writer.DataString("строка 1"),
+            writer.DataUint64(1),
+        },
+        "map": writer.DataMap{
+            "item_1": writer.DataMap{
+                "id":    writer.DataUint16(1),
+                "value": writer.DataString("Счастье"),
+            },
+            "item_2": writer.DataMap{
+                "id":    writer.DataUint16(2),
+                "value": writer.DataString("Счастье 2"),
+            },
+            "item_3": writer.DataMap{
+                "id":    writer.DataUint16(3),
+                "value": writer.DataString("Счастье 3"),
+            },
+        },
+    }
+    
+    err = db.Insert(i, record)
+    if err != nil {
+        fmt.Println(err)
+    }
+    
+    row, r := db.Find(i)
+    fmt.Println("--- Поиск по дереву:", row, r)
+
 }
 
-err = db.Insert(123123, record)
+_, err = db.Serialize(dbFile)
 if err != nil {
     panic(err)
 }
@@ -83,218 +114,68 @@ if err != nil {
 
 ```go
 
-db, err := reader.Open("test.db")
+dbr, err := reader.Open("test.db")
 if err != nil {
     panic(err)
 }
-defer db.Close()
+defer dbr.Close()
+
+fmt.Println("=== Данные о БД ===")
+fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount)
 
 var Record struct {
-    ID     uint64 `idx:"id"`
-    Value  string `idx:"value"`
+    ID    uint64         `idx:"id"`
+    Value string         `idx:"value"`
+    Slice []string       `idx:"slice"`
+    Map   map[string]any `idx:"map"`
 }
 
-result := db.Find(id)
+///
+
+fmt.Println("=== Поиск по ID  ===")
+
+result := dbr.Find(1)
 
 if result.Exist() {
     _ = result.Decode(&Record)
-    fmt.Println(Record.ID, Record.Value)
+    fmt.Println("Запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
+} else {
+	fmt.Printf("Запись c ID = %d не найдена!\n\r", id)
 }
 
-_, err = db.Serialize(dbFile)
-if err != nil {
-    panic(err)
+///
+
+fmt.Println("=== Проход по всем записям ===")
+
+for net := range dbr.GetAll() {
+    if row.Exist() {
+        _ = row.Decode(&Record)
+        fmt.Println(Record.ID, Record.Value, Record.Slice, Record.Map)
+    }
 }
+
+///
+
+fmt.Println("=== Проход с лимитами по периоду (С 1 и ПО 5 запись) ===")
+
+for row := range dbr.GetRange(1, 5) {
+    if row.Exist() {
+        _ = row.Decode(&Record)
+        fmt.Println(Record.ID, Record.Value, Record.Slice, Record.Map)
+    }
+}
+
+///
+
+fmt.Println("=== Поиск ключу в значении (медленный) ===")
+
+dbr.Where("value", "Привет!", func(result reader.Result) bool {
+	if err = result.Decode(&Record); err == nil {
+		fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
+		return false
+	}
+	return true
+})
+
 
 ```
-
-### Комбинированный пример
-
-- createIdx - cоздание индекса (файла БД) на основании рандомных данных
-- find - поиск по ID
-
-```go
-
-package main
-
-import (
-	"fmt"
-	"idx/reader"
-	"idx/writer"
-	"log"
-	"math/rand"
-	"net"
-	"os"
-	"runtime"
-	"runtime/debug"
-	"time"
-)
-
-const (
-	lineLength = 10
-	charset    = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-)
-
-var seededRand *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-func randomString(length int) string {
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
-	}
-	return string(b)
-}
-
-func randomBool() bool {
-	return seededRand.Intn(2) == 1
-}
-
-func randomIP() string {
-	return fmt.Sprintf("%d.%d.%d.%d/%s",
-		seededRand.Intn(256), // Генерация числа от 0 до 255
-		seededRand.Intn(256),
-		seededRand.Intn(256),
-		seededRand.Intn(256),
-		"24",
-	)
-}
-
-func createIdx() {
-	dbFile, err := os.Create("test.db")
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer dbFile.Close()
-
-	db, err := writer.New(
-		writer.Config{
-			Name: "БД",
-		},
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	for i := 1; i < 100_000; i++ {
-
-		var IP = randomIP()
-		_, network, _ := net.ParseCIDR(IP)
-		rndStr := randomString(lineLength)
-		bigInt := big.Int{}
-		bigInt.SetString("1329227995784915872903807060280344576", 10)
-		uint128 := writer.DataUint128(bigInt)
-
-		record := writer.DataMap{
-			"id":    writer.DataUint64(i),
-			"name":  writer.DataString("Привет! Строка = " + rndStr),
-			"ip":    writer.DataString(network.IP.String()),
-			"value": writer.DataString(rndStr),
-			"bool":  writer.DataBool(randomBool()),
-			"slice": writer.DataSlice{
-				writer.DataString("строка 1"),
-				writer.DataString("строка 2"),
-				writer.DataString("строка 3"),
-				writer.DataUint64(1),
-				writer.DataUint64(2),
-				writer.DataUint64(3),
-			},
-			"bytes": writer.DataBytes{
-				0x0,
-				0x0,
-				0x0,
-				0x2a,
-			},
-			"double": writer.DataFloat64(42.123456),
-			"float":  writer.DataFloat32(1.1),
-			"int32":  writer.DataInt32(-268435456),
-			"map": writer.DataMap{
-				"item_1": writer.DataMap{
-					"x": writer.DataSlice{
-						writer.DataUint64(0x7),
-						writer.DataUint64(0x8),
-						writer.DataUint64(0x9),
-					},
-					"value": writer.DataString("Счастье"),
-				},
-				"item_2": writer.DataMap{
-					"x": writer.DataSlice{
-						writer.DataUint64(0x7),
-						writer.DataUint64(0x8),
-						writer.DataUint64(0x9),
-					},
-					"value": writer.DataString("Счастье 2"),
-				},
-				"item_3": writer.DataMap{
-					"x": writer.DataSlice{
-						writer.DataUint64(0x7),
-						writer.DataUint64(0x8),
-						writer.DataUint64(0x9),
-					},
-					"value": writer.DataString("Счастье 2"),
-				},
-			},
-			"uint128":     &uint128,
-			"uint16":      writer.DataUint64(0x64),
-			"uint32":      writer.DataUint64(0x10000000),
-			"uint64":      writer.DataUint64(0x1000000000000000),
-			"utf8_string": writer.DataString("unicode! ☯ - ♫"),
-		}
-
-		err = db.Insert(i, record)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		// Выводим ID
-		fmt.Println(i)
-
-		// Проверяем какие данные будут записаны
-		prefixLen, r := db.Find(i)
-		fmt.Println("---", prefixLen, r)
-
-	}
-
-	// Сериализуем данные и записываем в файл
-	_, err = db.Serialize(dbFile)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func main() {
-
-	// Снижение пикового потребления памяти для запуска Garbage Collector
-	os.Setenv("GOGC", "30")
-	debug.SetGCPercent(30)
-
-	// Замеряем начальное использование памяти
-	var startMemStats runtime.MemStats
-	runtime.ReadMemStats(&startMemStats)
-	// Замеряем время начала операции
-	startTime := time.Now()
-
-	//===
-
-	createIdx()
-
-	//===
-
-	// Замеряем время окончания операции
-	elapsedTime := time.Since(startTime)
-	// Замеряем конечное использование памяти
-	var endMemStats runtime.MemStats
-	runtime.ReadMemStats(&endMemStats)
-	// Вычисляем использование памяти
-	memoryUsed := endMemStats.Alloc - startMemStats.Alloc
-
-	// Выводим результаты
-	fmt.Println("-------")
-	fmt.Printf("Время: %v\n", elapsedTime)
-	fmt.Printf("Оперативка: %d байт (%.2f MB)", memoryUsed, float64(memoryUsed)/1024/1024)
-
-}
-```
-
-
-
-
