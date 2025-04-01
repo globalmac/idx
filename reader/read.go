@@ -217,20 +217,80 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 		return
 	}
 
-	var expectedKind reflect.Kind
-	switch fieldValue.(type) {
+	var compareFn func(offset uint) bool
+
+	// Определяем тип поля и создаем соответствующую функцию сравнения
+	switch v := fieldValue.(type) {
 	case string:
-		expectedKind = reflect.String
-	case uint32:
-		expectedKind = reflect.Uint32
-	case uint64:
-		expectedKind = reflect.Uint64
-	case int:
-		expectedKind = reflect.Int
-	case bool:
-		expectedKind = reflect.Bool
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val string
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val == expected
+		}
 	case float64:
-		expectedKind = reflect.Float64
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val float64
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val == expected
+		}
+	case float32:
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val float32
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val == expected
+		}
+	case []byte:
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val []byte
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && bytes.Equal(val, expected)
+		}
+	case uint16:
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val uint16
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val == expected
+		}
+	case uint32:
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val uint32
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val == expected
+		}
+	case uint64:
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val uint64
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val == expected
+		}
+	case int32:
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val int32
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val == expected
+		}
+	case *big.Int: // Uint128
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val big.Int
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val.Cmp(expected) == 0
+		}
+	case bool:
+		expected := v
+		compareFn = func(offset uint) bool {
+			var val bool
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
+			return err == nil && val == expected
+		}
 	default:
 		return
 	}
@@ -262,7 +322,6 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 					continue
 				}
 
-				// Исправление: преобразуем uintptr в uint для работы с декодером
 				offset := uint(dataOffset)
 				typeNum, size, newOffset, err := r.dc.decodeCtrlData(offset)
 				if err != nil {
@@ -280,29 +339,11 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 
 						if string(key) == fieldName {
 							fieldOffset := nextOffset
-							match := false
-
-							switch expectedKind {
-							case reflect.String:
-								var val string
-								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
-								match = err == nil && val == fieldValue.(string)
-							case reflect.Uint64:
-								var val uint64
-								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
-								match = err == nil && val == fieldValue.(uint64)
-							case reflect.Uint32:
-								var val uint32
-								_, err := r.dc.decode(fieldOffset, reflect.ValueOf(&val).Elem(), 0)
-								match = err == nil && val == fieldValue.(uint32)
-							}
-
-							if match {
+							if compareFn(fieldOffset) {
 								if !yield(Result{
 									dc:     r.dc,
 									id:     nodeID,
 									offset: offset,
-									//prefixLen: bit,
 								}) {
 									return
 								}
@@ -311,7 +352,6 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 							break
 						}
 
-						// Исправление: работаем с uint для nextValueOffset
 						currentOffset, err = r.dc.nextValueOffset(nextOffset, 1)
 						if err != nil {
 							break
