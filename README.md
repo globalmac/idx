@@ -170,11 +170,11 @@ for row := range dbr.GetRange(1, 5) {
 fmt.Println("=== Поиск ключу в значении (медленный) ===")
 
 dbr.Where("value", "Привет!", func(result reader.Result) bool {
-	if err = result.Decode(&Record); err == nil {
-		fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
-		return false
-	}
-	return true
+    if err = result.Decode(&Record); err == nil {
+        fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
+        return false // Если нужно вернуть первое вхождение, иначе вернет все найденные записи
+    }
+    return true
 })
 
 
