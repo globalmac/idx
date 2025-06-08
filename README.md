@@ -155,7 +155,7 @@ if result.Exist() {
 
 fmt.Println("=== Проход по всем записям ===")
 
-for net := range dbr.GetAll() {
+for row := range dbr.GetAll() {
     if row.Exist() {
         _ = row.Decode(&Record)
         fmt.Println(Record.ID, Record.Value, Record.Slice, Record.Map)
