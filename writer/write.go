@@ -9,7 +9,7 @@ import (
 
 // Константы для маркеров и разделителей
 var (
-	HeaderMarker     = []byte("~IDX")
+	HeaderMarker     = []byte("~K3YF")
 	SectionSeparator = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 )
 
@@ -46,7 +46,6 @@ func New(cfg Config) (*BinaryTree, error) {
 // Insert добавляет новый элемент в дерево по ключу
 func (t *BinaryTree) Insert(key uint64, data DataItem) error {
 	t.totalNodes = 0
-	t.totalSize++
 	return t.root.insert(
 		insertOps{
 			key:        key,
