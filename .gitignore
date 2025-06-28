@@ -2,3 +2,6 @@
 .vscode
 .DS_Store
 vendor/
+test.db
+test.db.enc
+test2.db
