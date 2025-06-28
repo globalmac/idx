@@ -31,6 +31,7 @@ type Metadata struct {
 	Name       string `idx:"name"`
 	BuildEpoch uint   `idx:"created_at"`
 	NodeCount  uint   `idx:"node_count"`
+	Total      uint   `idx:"data_count"`
 }
 
 type K3dt byte
