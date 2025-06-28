@@ -25,7 +25,6 @@
 
 > Вдохновение и общая идея + сериализатор/десериализатор взяты из формата данных MMDB (MaxMind Database) и в частности: https://github.com/maxmind/mmdbwriter (writer) и https://github.com/oschwald/maxminddb-golang (reader) для поиска по IP-адресам
 
-
 ### Типы данных значений:
 
 - Map
@@ -70,7 +69,6 @@ go get -u github.com/globalmac/idx
 Готовим 1000 записей и записываем их в файл.
 
 Внутри представлен закомментированный блок с шифрованием данных и их сжатием после записи в файл.
-
 
 ```golang
 package main
