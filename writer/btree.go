@@ -15,7 +15,6 @@ type BinaryTree struct {
 	root       *node    // Корневой узел
 	totalNodes int      // Общее количество узлов
 	depth      int      // Глубина дерева
-	totalSize  int      // Общее кол-во элементов в записи
 }
 
 // prepare подготавливает дерево к сериализации
@@ -132,7 +131,6 @@ func (t *BinaryTree) writeMetadata(ds *dataSerializer) (int64, error) {
 		"created_at": DataUint64(t.timestamp),
 		"name":       DataString(t.name),
 		"node_count": DataUint32(t.totalNodes),
-		"data_count": DataUint32(t.totalSize),
 	}
 	return meta.Serialize(ds)
 }
