@@ -23,6 +23,7 @@
 - Функции поиска по ID (Find), итерация по всему файлу (GetAll), поиск значения в мапе (Where), выборка по диапазону (Range с 1 по 5, например)
 - Сжимает (Tar GZ), хеширует (Murmur3) и шифрует (AES-256) данные и файлы БД (при использовании функций EncryptDB/DecryptDB)
 
+
 > Вдохновение и общая идея + сериализатор/десериализатор взяты из формата данных MMDB (MaxMind Database) и в частности: https://github.com/maxmind/mmdbwriter (writer) и https://github.com/oschwald/maxminddb-golang (reader) для поиска по IP-адресам
 
 ### Типы данных значений:
