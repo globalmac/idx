@@ -20,7 +20,7 @@ func TestReadFile(t *testing.T) {
 	var Record struct {
 		ID    uint64         `idx:"id"`
 		Value string         `idx:"value"`
-		Slice []string       `idx:"slice"`
+		Slice []any          `idx:"slice"`
 		Map   map[string]any `idx:"map"`
 	}
 
@@ -28,7 +28,7 @@ func TestReadFile(t *testing.T) {
 
 	fmt.Println("=== Поиск по ID  ===")
 
-	var id uint64 = 9_000_000
+	var id uint64 = 999_000
 	result := dbr.Find(id)
 
 	if result.Exist() {
@@ -81,9 +81,14 @@ func TestReadFileSecure(t *testing.T) {
 	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total)
 
 	var Record struct {
-		ID    uint64         `idx:"id"`
+		ID   uint64 `idx:"id"`
+		Data struct {
+			Detail struct {
+				ID uint64 `idx:"id"`
+			} `idx:"detail"`
+		} `idx:"data"`
 		Value string         `idx:"value"`
-		Slice []string       `idx:"slice"`
+		Slice []any          `idx:"slice"`
 		Map   map[string]any `idx:"map"`
 	}
 
@@ -91,7 +96,7 @@ func TestReadFileSecure(t *testing.T) {
 
 	fmt.Println("=== Поиск по ID  ===")
 
-	var id uint64 = 777_456
+	var id uint64 = 3298257
 	result := dbr.Find(id)
 
 	if result.Exist() {
@@ -100,5 +105,23 @@ func TestReadFileSecure(t *testing.T) {
 	} else {
 		fmt.Printf("Запись c ID = %d не найдена!\n\r", id)
 	}
+
+	/*fmt.Println("=== Проход по диапазону (С 1 и ПО 5 запись) ===")
+
+	for row := range dbr.GetRange(1, 3) {
+		if row.Exist() {
+			_ = row.Decode(&Record)
+			fmt.Println(Record.ID, Record.Value, Record.Slice, Record.Map)
+		}
+	}
+
+	dbr.Where("value", "Привет 1!", func(result Result) bool {
+		//dbr.Where2("id", uint16(112), func(result Result) bool {
+		if err := result.Decode(&Record); err == nil {
+			fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map, Record.Data.Detail.ID)
+			return true // Если нужно вернуть первое вхождение, иначе вернет все найденные записи
+		}
+		return true
+	})*/
 
 }

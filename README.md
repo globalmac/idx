@@ -149,7 +149,7 @@ func main() {
 	}	
 	
 	// Пример шифрования и сжатия записанного файла - опционально
-	/*err := idx.EncryptDB(filename, filename+".enc", "SecretPwd123")
+	/*err = idx.EncryptDB(filename, filename+".enc", "SecretPwd123")
 	if err != nil {
 		fmt.Println("Ошибка шифрования и архивации файл БД:", err)
 		return
@@ -214,7 +214,7 @@ func main() {
 	var Record struct {
 		ID    uint64         `idx:"id"`
 		Value string         `idx:"value"`
-		Slice []string       `idx:"slice"`
+		Slice []any          `idx:"slice"`
 		Map   map[string]any `idx:"map"`
 	}
 
