@@ -296,7 +296,7 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 		return
 	}
 
-	var stack [64]struct {
+	var stack [128]struct { // Увеличиваем размер стека для гарантии
 		node   uint
 		nodeID uint64
 		bit    uint8
@@ -311,6 +311,7 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 	nodeCount := r.Metadata.NodeCount
 	offsetMult := r.nodeOffsetMult
 
+	// Основной обход дерева
 	for stackSize > 0 {
 		stackSize--
 		item := stack[stackSize]
@@ -366,6 +367,7 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 			continue
 		}
 
+		// Добавляем узлы в обратном порядке (сначала правый, потом левый)
 		if stackSize+2 < len(stack) {
 			offset := node * offsetMult
 			leftPointer := r.nodeReader.readLeft(offset)
@@ -389,6 +391,7 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 			stackSize++
 		}
 	}
+
 }
 
 func (r *Reader) Scan(id uint64, prefixLen uint8) iter.Seq[Result] {

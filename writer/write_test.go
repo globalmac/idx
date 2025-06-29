@@ -23,13 +23,15 @@ func TestCreateFileAndInsert(t *testing.T) {
 	var i uint64
 	for i = 1; i <= 10_000_000; i++ {
 
-		str := strconv.Itoa(int(i))
+		var str = strconv.Itoa(int(i))
 
 		var record = DataMap{
 			"id":    DataUint64(i),
-			"value": DataString("Привет" + str + "!"),
+			"value": DataString("Привет " + str + "!"),
 			"slice": DataSlice{
-				DataString("строка " + str),
+				//DataUint64(1),
+				DataString("Привет слайс" + str + "!"),
+				DataBytes{1, 2, 3, 4},
 				DataUint64(i),
 			},
 			"map": DataMap{
@@ -73,13 +75,19 @@ func TestCreateFileAndInsertSecure(t *testing.T) {
 	var i uint64
 	for i = 1; i <= 10_000_000; i++ {
 
-		str := strconv.Itoa(int(i))
+		var str = strconv.Itoa(int(i))
 
 		var record = DataMap{
 			"id":    DataUint64(i),
-			"value": DataString("Привет" + str + "!"),
+			"value": DataString("Привет " + str + "!"),
+			"data": DataMap{
+				"detail": DataMap{
+					"id": DataUint64(i),
+				},
+			},
 			"slice": DataSlice{
-				DataString("строка " + str),
+				DataString("Привет слайс" + str + "!"),
+				DataBytes{1, 2, 3, 4},
 				DataUint64(i),
 			},
 			"map": DataMap{
