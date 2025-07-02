@@ -441,7 +441,8 @@ dbr.Where([]any{"slice", 0}, ">", 3, func(result reader.Result) bool {})
 // В слайсе по ключу 2 (DataUint64)
 dbr.Where([]any{"slice", 2}, "<", 3, func(result reader.Result) bool {})
 
-// IN - поддерживает []string, []int и []uint64
+// IN - поддерживает []string, []int и []uin
+//t64
 dbr.Where([]any{"value"},  "IN", []string{"Привет", "Текст", "Выход"}, func(result reader.Result) bool {})
 dbr.Where([]any{"id"},     "IN", []int{111, 77777, 510777}, func(result reader.Result) bool {})
 dbr.Where([]any{"big_id"}, "IN", []uint64int{111123, 77777000, 510777000}, func(result reader.Result) bool {})
