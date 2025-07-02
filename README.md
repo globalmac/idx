@@ -20,7 +20,8 @@
 - Mmap (отображение файлов в память)
 - Функциональный сериализатор/десериализатор данных для значений (JSON-like)
 - Состоит из writer - создает индекс (файл БД) и reader - читает файл
-- Функции поиска по ID (Find), итерация по всему файлу (GetAll), поиск значения в мапе (Where), выборка по диапазону (Range с 1 по 5, например)
+- Функции поиска по ID (Find), итерация по всему файлу (GetAll), поиск значения в мапе/слайсе и т.д. (Where), выборка по диапазону (Range с 1 по 5, например)
+- При поиске по значения (WHERE) поддерживается производительный поиск: "=", "!=", "<", ">", "IN", "LIKE", "ILIKE".
 - Сжимает (Tar GZ), хеширует (Murmur3) и шифрует (AES-256) данные и файлы БД (при использовании функций EncryptDB/DecryptDB)
 
 > Вдохновение и общая идея + сериализатор/десериализатор взяты из формата данных MMDB (MaxMind Database) и в частности: https://github.com/maxmind/mmdbwriter (writer) и https://github.com/oschwald/maxminddb-golang (reader) для поиска по IP-адресам
@@ -64,7 +65,7 @@ go get -u github.com/globalmac/idx
 - **GetRange(start, end)** - вернет диапазон "с" и "по" записей
 - **Where** - поиск по значениям (внутри структуры данных значений)
 
-### Создание индекса (файла БД)
+### Writer: создание индекса (файла БД)
 
 Готовим 1000 записей и записываем их в файл.
 
@@ -113,6 +114,8 @@ func main() {
 			"slice": writer.DataSlice{
 				writer.DataString("слайс строка "+strID),
 				writer.DataUint64(1),
+				writer.DataUint64(2),
+				writer.DataUint64(3),
 			},
 			"map": writer.DataMap{
 				"item_1": writer.DataMap{
@@ -161,7 +164,7 @@ func main() {
 
 ```
 
-### Чтение индекса (файла БД)
+### Reader: чтение индекса (файла БД)
 
 Поиск, итератор по всем значениям, выборка диапазона, поиск внутри структуры.
 
@@ -257,9 +260,9 @@ func main() {
 
 	///
 
-	fmt.Println("=== Поиск ключу в значении ===")
+	fmt.Println("=== Поиск в значении Record.Value ===")
 
-	dbr.Where("value", "Привет это значение - 25", func(result reader.Result) bool {
+	dbr.Where([]any{"value"}, "=", "Привет это значение - 25", func(result Result) bool {
 		if err = result.Decode(&Record); err == nil {
 			fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
 			return false // Если нужно вернуть первое вхождение, иначе вернет все найденные записи
@@ -270,3 +273,137 @@ func main() {
 }
 
 ```
+
+### Reader: поиск внутри значения (метод Where)
+
+Удобный, расширенный и быстрый поиск внутри структуры значений.
+
+Поддерживаются операции: "=", "!=", "<", ">", "IN", "LIKE", "ILIKE".
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/globalmac/idx/reader"
+	"syscall"
+	"time"
+)
+
+func main() {
+
+	var filename = "test.db"
+
+	// Пример дешифрования и декомпрессии записанного .enc файла - опционально
+	/*
+	// Для UNIX - проверяем есть ли чистовой файл 
+	if syscall.Stat(filename, &syscall.Stat_t{}) != nil {
+	    // Извлекаем и расшифровываем test.db.enc и сохраняем его как test.db
+		err := idx.DecryptDB(filename+".enc", filename, "SecretPwd123")
+		if err != nil {
+			fmt.Println("Ошибка извлечения файла БД:", err)
+			return
+		}
+	    // Опционально - удаляем шифрованный архив, так как у нас есть чистовые данные
+	    //os.Remove(filename+".enc")
+	}*/
+
+	// Открываем файл для чтения
+	dbr, err := reader.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer dbr.Close()
+	
+	/* // Памятка по значениям при записи
+    var record = writer.DataMap{
+        "id":    writer.DataUint64(i),
+        "value": writer.DataString("Привет это значение - "+strID),
+        "slice": writer.DataSlice{
+            writer.DataString("слайс строка "+strID),
+            writer.DataUint64(1),
+            writer.DataUint64(2),
+            writer.DataUint64(3),
+        },
+        "map": writer.DataMap{
+            "item_1": writer.DataMap{
+                "id":    writer.DataUint16(1),
+                "value": writer.DataString("Счастье"),
+            },
+            "item_2": writer.DataMap{
+                "id":    writer.DataUint16(2),
+                "value": writer.DataString("Счастье 2"),
+            },
+            "item_3": writer.DataMap{
+                "id":    writer.DataUint16(3),
+                "value": writer.DataString("Счастье 3"),
+            },
+        },
+    }*/
+	
+	// Структура данных
+	var Record struct {
+		ID    uint64         `idx:"id"`
+		Value string         `idx:"value"`
+		Slice []any          `idx:"slice"`
+		Map   map[string]any `idx:"map"`
+	}
+	
+	///
+
+	fmt.Println("=== Поиск ключу в значении ===")
+
+	// Для string можно использовать: "=", "!=", "IN", "LIKE", "ILIKE"
+	dbr.Where([]any{"value"}, "LIKE", "это значение - 25", func(result Result) bool {
+		if err = result.Decode(&Record); err == nil {
+			fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
+			return false // Если нужно вернуть первое вхождение, иначе вернет все найденные записи
+		}
+		return true
+	})
+
+	var values = []string{"Ключ-10", "Ключ-555", "Ключ-900"}
+	var counter = 0
+	// Найдём все values
+	dbr.Where([]any{"value"}, "IN", values, func(result Result) bool {
+		if err = result.Decode(&Record); err == nil {
+			counter++ // Увеличиваем счетчик вхождений
+			fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
+			if len(values) == counter {
+				return false // Если счетчик найденных = кол-ву values - останавливаемся
+			}
+			return true
+		}
+		return true
+	})
+
+}
+
+```
+
+Еще примеры поиска:
+
+```go
+// В строке
+dbr.Where([]any{"value"}, "ILIKE", "привет", func(result Result) bool {})
+
+// В мапе
+dbr.Where([]any{"map", "item_3", "id"}, "=", 1, func(result Result) bool {})
+
+// В мапе по ключу
+dbr.Where([]any{"map", "items", 2, "row"}, "=", 100, func(result Result) bool {})
+
+// В слайсе по ключу 0 (DataString)
+dbr.Where([]any{"slice", 0}, ">", 3, func(result Result) bool {})
+
+// В слайсе по ключу 2 (DataUint64)
+dbr.Where([]any{"slice", 2}, "<", 3, func(result Result) bool {})
+
+// IN - поддерживает []string, []int и []uint64
+dbr.Where([]any{"value"},  "IN", []string{"Привет", "Текст", "Выход"}, func(result Result) bool {})
+dbr.Where([]any{"id"},     "IN", []int{111, 77777, 510777}, func(result Result) bool {})
+dbr.Where([]any{"big_id"}, "IN", []uint64int{111123, 77777000, 510777000}, func(result Result) bool {})
+
+```
+
+Больше примеров поиска в `/reader/read_test.go => TestReadFileSecure()`
