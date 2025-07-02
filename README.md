@@ -118,12 +118,14 @@ import (
 	"fmt"
 	"github.com/globalmac/idx/reader"
 	"github.com/globalmac/idx/writer"
+	"os"
+	"strconv"
 )
 
 func main() {
 
 	var filename = "test.db"
-	
+
 	// Открываем файл для записи
 	dbFile, err := os.Create(filename)
 	if err != nil {
@@ -146,13 +148,13 @@ func main() {
 	for i = 1; i <= 1000; i++ {
 
 		strID := strconv.Itoa(int(i))
-		
+
 		// Структуру значения
 		var record = writer.DataMap{
 			"id":    writer.DataUint64(i),
-			"value": writer.DataString("Привет это значение - "+strID),
+			"value": writer.DataString("Привет это значение - " + strID),
 			"slice": writer.DataSlice{
-				writer.DataString("слайс строка "+strID),
+				writer.DataString("слайс строка " + strID),
 				writer.DataUint64(1),
 				writer.DataUint64(2),
 				writer.DataUint64(3),
@@ -189,8 +191,8 @@ func main() {
 	_, err = db.Serialize(dbFile)
 	if err != nil {
 		panic(err)
-	}	
-	
+	}
+
 	// Пример шифрования и сжатия записанного файла - опционально
 	/*err = idx.EncryptDB(filename, filename+".enc", "SecretPwd123")
 	if err != nil {
@@ -199,7 +201,7 @@ func main() {
 	}
 	// Удаляем файл с чистовыми данными, оставляя только сжатый шифрованный .enc
 	os.Remove(filename)*/
-	
+
 }
 
 ```
@@ -302,7 +304,7 @@ func main() {
 
 	fmt.Println("=== Поиск в значении Record.Value ===")
 
-	dbr.Where([]any{"value"}, "=", "Привет это значение - 25", func(result Result) bool {
+	dbr.Where([]any{"value"}, "=", "Привет это значение - 25", func(result reader.Result) bool {
 		if err = result.Decode(&Record); err == nil {
 			fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
 			return false // Если нужно вернуть первое вхождение, иначе вернет все найденные записи
@@ -394,7 +396,7 @@ func main() {
 	fmt.Println("=== Поиск ключу в значении ===")
 
 	// Для string можно использовать: "=", "!=", "IN", "LIKE", "ILIKE"
-	dbr.Where([]any{"value"}, "LIKE", "это значение - 25", func(result Result) bool {
+	dbr.Where([]any{"value"}, "LIKE", "это значение - 25", func(result reader.Result) bool {
 		if err = result.Decode(&Record); err == nil {
 			fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
 			return false // Если нужно вернуть первое вхождение, иначе вернет все найденные записи
@@ -405,7 +407,7 @@ func main() {
 	var values = []string{"Ключ-10", "Ключ-555", "Ключ-900"}
 	var counter = 0
 	// Найдём все values
-	dbr.Where([]any{"value"}, "IN", values, func(result Result) bool {
+	dbr.Where([]any{"value"}, "IN", values, func(result reader.Result) bool {
 		if err = result.Decode(&Record); err == nil {
 			counter++ // Увеличиваем счетчик вхождений
 			fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
@@ -425,24 +427,24 @@ func main() {
 
 ```go
 // В строке
-dbr.Where([]any{"value"}, "ILIKE", "привет", func(result Result) bool {})
+dbr.Where([]any{"value"}, "ILIKE", "привет", func(result reader.Result) bool {})
 
 // В мапе
-dbr.Where([]any{"map", "item_3", "id"}, "=", 1, func(result Result) bool {})
+dbr.Where([]any{"map", "item_3", "id"}, "=", 1, func(result reader.Result) bool {})
 
 // В мапе по ключу
-dbr.Where([]any{"map", "items", 2, "row"}, "=", 100, func(result Result) bool {})
+dbr.Where([]any{"map", "items", 2, "row"}, "=", 100, func(result reader.Result) bool {})
 
 // В слайсе по ключу 0 (DataString)
-dbr.Where([]any{"slice", 0}, ">", 3, func(result Result) bool {})
+dbr.Where([]any{"slice", 0}, ">", 3, func(result reader.Result) bool {})
 
 // В слайсе по ключу 2 (DataUint64)
-dbr.Where([]any{"slice", 2}, "<", 3, func(result Result) bool {})
+dbr.Where([]any{"slice", 2}, "<", 3, func(result reader.Result) bool {})
 
 // IN - поддерживает []string, []int и []uint64
-dbr.Where([]any{"value"},  "IN", []string{"Привет", "Текст", "Выход"}, func(result Result) bool {})
-dbr.Where([]any{"id"},     "IN", []int{111, 77777, 510777}, func(result Result) bool {})
-dbr.Where([]any{"big_id"}, "IN", []uint64int{111123, 77777000, 510777000}, func(result Result) bool {})
+dbr.Where([]any{"value"},  "IN", []string{"Привет", "Текст", "Выход"}, func(result reader.Result) bool {})
+dbr.Where([]any{"id"},     "IN", []int{111, 77777, 510777}, func(result reader.Result) bool {})
+dbr.Where([]any{"big_id"}, "IN", []uint64int{111123, 77777000, 510777000}, func(result reader.Result) bool {})
 
 ```
 
