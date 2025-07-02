@@ -357,7 +357,7 @@ func main() {
 	}
 	defer dbr.Close()
 	
-	/* // Памятка по значениям при записи
+	/* Памятка по значениям при записи
     var record = writer.DataMap{
         "id":    writer.DataUint64(i),
         "value": writer.DataString("Привет это значение - "+strID),
