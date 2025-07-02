@@ -3,6 +3,7 @@ package writer
 import (
 	"fmt"
 	"github.com/globalmac/idx"
+	"math/big"
 	"os"
 	"strconv"
 	"testing"
@@ -77,12 +78,40 @@ func TestCreateFileAndInsertSecure(t *testing.T) {
 
 		var str = strconv.Itoa(int(i))
 
+		var bigInt = big.Int{}
+		bigInt.SetString("18446744073709551615777"+str, 10)
+		uint128 := DataUint128(bigInt)
+		//
+		var floatStr64, _ = strconv.ParseFloat("42."+str, 64)
+		var floatStr32, _ = strconv.ParseFloat("23."+str, 32)
+
+		var u16 = 1
+		var u32 = 2
+		var u64 = 3
+
+		var bv = false
+		if i >= 1 && i <= 1000 {
+			bv = true
+			u16 = 16
+			u32 = 32
+			u64 = 64
+		}
+
 		var record = DataMap{
 			"id":    DataUint64(i),
 			"value": DataString("Привет " + str + "!"),
 			"data": DataMap{
 				"detail": DataMap{
-					"id": DataUint64(i),
+					"id":      DataUint64(i),
+					"val":     DataString("Ключ-" + str),
+					"bool":    DataBool(bv),
+					"double":  DataFloat64(floatStr64),
+					"float":   DataFloat32(float32(floatStr32)),
+					"uint128": &uint128,
+					"uint16":  DataUint16(u16),
+					"uint32":  DataUint32(u32),
+					"uint64":  DataUint64(u64),
+					"utf8":    DataString("unicode" + str + "!😀"),
 				},
 			},
 			"slice": DataSlice{
@@ -93,14 +122,14 @@ func TestCreateFileAndInsertSecure(t *testing.T) {
 			"map": DataMap{
 				"item_1": DataMap{
 					"id":    DataUint16(1),
-					"value": DataString("Счастье"),
+					"value": DataString("Счастье" + str),
 				},
 				"item_2": DataMap{
 					"id":    DataUint16(2),
 					"value": DataString("Счастье 2"),
 				},
 				"item_3": DataMap{
-					"id":    DataUint16(3),
+					"id":    DataUint64(i + 1),
 					"value": DataString("Счастье 3"),
 				},
 			},

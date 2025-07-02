@@ -11,9 +11,9 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strings"
 )
 
-// var sectionSeparatorSize = 16
 const sectionSeparatorSize = 16
 
 const notFound uint = math.MaxUint
@@ -213,90 +213,18 @@ func (r *Reader) GetAll() iter.Seq[Result] {
 	return r.Scan(0, 0)
 }
 
-func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Result) bool) {
-	if r.buffer == nil {
+// Where ищет записи по вложенному пути и значению с заданным режимом сравнения.
+func (r *Reader) Where(path []any, mode string, fieldValue interface{}, yield func(Result) bool) {
+	if r.buffer == nil || len(path) == 0 {
 		return
 	}
 
-	var compareFn func(offset uint) bool
-
-	// Определяем тип поля и создаем соответствующую функцию сравнения
-	switch v := fieldValue.(type) {
-	case string:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val string
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val == expected
-		}
-	case float64:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val float64
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val == expected
-		}
-	case float32:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val float32
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val == expected
-		}
-	case []byte:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val []byte
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && bytes.Equal(val, expected)
-		}
-	case uint16:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val uint16
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val == expected
-		}
-	case uint32:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val uint32
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val == expected
-		}
-	case uint64:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val uint64
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val == expected
-		}
-	case int32:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val int32
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val == expected
-		}
-	case *big.Int: // Uint128
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val big.Int
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val.Cmp(expected) == 0
-		}
-	case bool:
-		expected := v
-		compareFn = func(offset uint) bool {
-			var val bool
-			_, err := r.dc.decode(offset, reflect.ValueOf(&val).Elem(), 0)
-			return err == nil && val == expected
-		}
-	default:
+	compareFn := makeComparePathFn(r.dc, fieldValue, mode)
+	if compareFn == nil {
 		return
 	}
 
-	var stack [128]struct { // Увеличиваем размер стека для гарантии
+	var stack [128]struct {
 		node   uint
 		nodeID uint64
 		bit    uint8
@@ -311,7 +239,6 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 	nodeCount := r.Metadata.NodeCount
 	offsetMult := r.nodeOffsetMult
 
-	// Основной обход дерева
 	for stackSize > 0 {
 		stackSize--
 		item := stack[stackSize]
@@ -323,51 +250,24 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 				if err != nil {
 					continue
 				}
-
 				offset := uint(dataOffset)
-				typeNum, size, newOffset, err := r.dc.decodeCtrlData(offset)
+				valOffset, err := resolvePath(r.dc, offset, path)
 				if err != nil {
 					continue
 				}
-
-				if typeNum == writer.TypeMap {
-					found := false
-					currentOffset := newOffset
-					for i := uint(0); i < size; i++ {
-						key, nextOffset, err := r.dc.decodeKey(currentOffset)
-						if err != nil {
-							break
-						}
-
-						if string(key) == fieldName {
-							fieldOffset := nextOffset
-							if compareFn(fieldOffset) {
-								if !yield(Result{
-									dc:     r.dc,
-									id:     nodeID,
-									offset: offset,
-								}) {
-									return
-								}
-							}
-							found = true
-							break
-						}
-
-						currentOffset, err = r.dc.nextValueOffset(nextOffset, 1)
-						if err != nil {
-							break
-						}
-					}
-					if found {
-						continue
+				if compareFn(valOffset) {
+					if !yield(Result{
+						dc:     r.dc,
+						id:     nodeID,
+						offset: offset,
+					}) {
+						return
 					}
 				}
 			}
 			continue
 		}
 
-		// Добавляем узлы в обратном порядке (сначала правый, потом левый)
 		if stackSize+2 < len(stack) {
 			offset := node * offsetMult
 			leftPointer := r.nodeReader.readLeft(offset)
@@ -391,8 +291,341 @@ func (r *Reader) Where(fieldName string, fieldValue interface{}, yield func(Resu
 			stackSize++
 		}
 	}
-
 }
+
+// makeCompareFn возвращает функцию сравнения по смещению и значению / режимы mode - "=", "like", "ilike", "<", ">"
+func makeComparePathFn(dc dc, expected interface{}, mode string) func(offset uint) bool {
+	switch v := expected.(type) {
+	case string:
+		switch mode {
+		case "=":
+			return func(offset uint) bool {
+				var val string
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val == v
+			}
+		case "LIKE":
+			return func(offset uint) bool {
+				var val string
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && strings.Contains(val, v)
+			}
+		case "ILIKE":
+			expectedLower := strings.ToLower(v)
+			return func(offset uint) bool {
+				var val string
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && strings.Contains(strings.ToLower(val), expectedLower)
+			}
+		}
+
+	case float64:
+		switch mode {
+		case "=":
+			return func(offset uint) bool {
+				var val float64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val == v
+			}
+		case "<":
+			return func(offset uint) bool {
+				var val float64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val < v
+			}
+		case ">":
+			return func(offset uint) bool {
+				var val float64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val > v
+			}
+		}
+
+	case float32:
+		switch mode {
+		case "=":
+			return func(offset uint) bool {
+				var val float32
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val == v
+			}
+		case "<":
+			return func(offset uint) bool {
+				var val float32
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val < v
+			}
+		case ">":
+			return func(offset uint) bool {
+				var val float32
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val > v
+			}
+		}
+
+	case bool:
+		if mode != "=" {
+			return nil
+		}
+		return func(offset uint) bool {
+			var val bool
+			_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == v
+		}
+
+	case int:
+		vInt := int64(v)
+		switch mode {
+		case "=":
+			return func(offset uint) bool {
+				var val int64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val == vInt
+			}
+		case "!=":
+			return func(offset uint) bool {
+				var val int64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val != vInt
+			}
+		case "<":
+			return func(offset uint) bool {
+				var val int64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val < vInt
+			}
+		case ">":
+			return func(offset uint) bool {
+				var val int64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val > vInt
+			}
+		}
+
+	case []byte:
+		if mode != "=" {
+			return nil
+		}
+		return func(offset uint) bool {
+			var val []byte
+			_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && bytes.Equal(val, v)
+		}
+
+	case uint16:
+		switch mode {
+		case "=":
+			return func(offset uint) bool {
+				var val uint16
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val == v
+			}
+		case "!=":
+			return func(offset uint) bool {
+				var val uint16
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val != v
+			}
+		case "<":
+			return func(offset uint) bool {
+				var val uint16
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val < v
+			}
+		case ">":
+			return func(offset uint) bool {
+				var val uint16
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val > v
+			}
+		}
+
+	case uint32:
+		switch mode {
+		case "=":
+			return func(offset uint) bool {
+				var val uint32
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val == v
+			}
+		case "!=":
+			return func(offset uint) bool {
+				var val uint32
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val != v
+			}
+		case "<":
+			return func(offset uint) bool {
+				var val uint32
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val < v
+			}
+		case ">":
+			return func(offset uint) bool {
+				var val uint32
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val > v
+			}
+		}
+
+	case uint64:
+		switch mode {
+		case "=":
+			return func(offset uint) bool {
+				var val uint64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val == v
+			}
+		case "!=":
+			return func(offset uint) bool {
+				var val uint64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val != v
+			}
+		case "<":
+			return func(offset uint) bool {
+				var val uint64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val < v
+			}
+		case ">":
+			return func(offset uint) bool {
+				var val uint64
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val > v
+			}
+		}
+
+	case *big.Int:
+		switch mode {
+		case "=":
+			return func(offset uint) bool {
+				var val big.Int
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val.Cmp(v) == 0
+			}
+		case "!=":
+			return func(offset uint) bool {
+				var val big.Int
+				_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+				return err == nil && val.Cmp(v) != 0
+			}
+		}
+
+	case []string:
+		if mode != "IN" {
+			return nil
+		}
+		set := make(map[string]struct{}, len(v))
+		for _, item := range v {
+			set[item] = struct{}{}
+		}
+		return func(offset uint) bool {
+			var val string
+			_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+			_, ok := set[val]
+			return err == nil && ok
+		}
+
+	case []int:
+		if mode != "IN" {
+			return nil
+		}
+		set := make(map[int64]struct{}, len(v))
+		for _, item := range v {
+			set[int64(item)] = struct{}{}
+		}
+		return func(offset uint) bool {
+			var val int64
+			_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+			_, ok := set[val]
+			return err == nil && ok
+		}
+
+	case []uint64:
+		if mode != "IN" {
+			return nil
+		}
+		set := make(map[uint64]struct{}, len(v))
+		for _, item := range v {
+			set[item] = struct{}{}
+		}
+		return func(offset uint) bool {
+			var val uint64
+			_, err := dc.decode(offset, reflect.ValueOf(&val), 0)
+			_, ok := set[val]
+			return err == nil && ok
+		}
+	}
+	return nil
+}
+
+// resolvePath проходит по вложенному пути (map[string] / []any) и возвращает смещение
+func resolvePath(dc dc, offset uint, path []any) (uint, error) {
+	curr := offset
+	for _, part := range path {
+		switch key := part.(type) {
+		case string:
+			newOffset, err := findInMap(dc, curr, key)
+			if err != nil {
+				return 0, err
+			}
+			curr = newOffset
+		case int:
+			newOffset, err := findInSlice(dc, curr, uint(key))
+			if err != nil {
+				return 0, err
+			}
+			curr = newOffset
+		default:
+			return 0, errors.New("неподдерживаемый путь элемента")
+		}
+	}
+	return curr, nil
+}
+
+// findInMap ищет ключ в Map по смещению
+func findInMap(dc dc, offset uint, key string) (uint, error) {
+	typeNum, size, newOffset, err := dc.decodeCtrlData(offset)
+	if err != nil || typeNum != writer.TypeMap {
+		return 0, errors.New("не Map")
+	}
+	curr := newOffset
+	for i := uint(0); i < size; i++ {
+		k, valOffset, err := dc.decodeKey(curr)
+		if err != nil {
+			return 0, err
+		}
+		if string(k) == key {
+			return valOffset, nil
+		}
+		curr, err = dc.nextValueOffset(valOffset, 1)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return 0, errors.New("Ключа нет в Map")
+}
+
+// findInSlice ищет индекс в Slice
+func findInSlice(dc dc, offset uint, index uint) (uint, error) {
+	typeNum, size, curr, err := dc.decodeCtrlData(offset)
+	if err != nil || typeNum != writer.TypeSlice {
+		return 0, errors.New("не Slice")
+	}
+	if index >= size {
+		return 0, errors.New("индекс вне диапазона")
+	}
+	for i := uint(0); i < index; i++ {
+		curr, err = dc.nextValueOffset(curr, 1)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return curr, nil
+}
+
+///
 
 func (r *Reader) Scan(id uint64, prefixLen uint8) iter.Seq[Result] {
 	return func(yield func(Result) bool) {
