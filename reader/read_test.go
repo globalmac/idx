@@ -2,7 +2,7 @@ package reader
 
 import (
 	"fmt"
-	"github.com/globalmac/idx"
+	"github.com/globalmac/idx/encrypt"
 	"math/big"
 	"os"
 	"syscall"
@@ -68,7 +68,7 @@ func TestReadFileSecure(t *testing.T) {
 	var cfn = "./../test2.db"
 
 	if syscall.Stat(cfn, &syscall.Stat_t{}) != nil {
-		err := idx.DecryptDB("./../test.db.enc", cfn, "0ih7iDiipucs9AqNOHf")
+		err := encrypt.DecryptDB("./../test.db.enc", cfn, "0ih7iDiipucs9AqNOHf")
 		if err != nil {
 			t.Error("Ошибка извлечения файла БД:", err)
 		}
@@ -454,6 +454,74 @@ func TestReadFileSecure(t *testing.T) {
 		}
 		return true
 	})
+
+	t.Log("Все ОК")
+
+}
+
+func TestReadFileWithNulled(t *testing.T) {
+
+	var cfn = "./../test3.db"
+
+	dbr, err := Open(cfn)
+	if err != nil {
+		t.Error("Ошибка чтения БД:", err)
+	}
+	defer dbr.Close()
+
+	fmt.Println("=== Данные о БД ===")
+	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total)
+
+	var Record struct {
+		ID         uint64 `idx:"id"`
+		Value      string `idx:"value"`
+		EmptyValue string `idx:"empty_value"`
+		EmptyID    uint64 `idx:"empty_id"`
+		Data       struct {
+			Detail struct {
+				ID      uint64  `idx:"id"`
+				Val     string  `idx:"val"`
+				Bool    bool    `idx:"bool"`
+				Double  float64 `idx:"double"`
+				Float   float32 `idx:"float"`
+				Uint128 big.Int `idx:"uint128"`
+				Uint16  uint16  `idx:"uint16"`
+				Uint32  uint32  `idx:"uint16"`
+				Uint64  uint64  `idx:"uint16"`
+				Utf8    string  `idx:"utf8"`
+			} `idx:"detail"`
+		} `idx:"data"`
+		Slice []any          `idx:"slice"`
+		Map   map[string]any `idx:"map"`
+	}
+
+	///
+
+	fmt.Println("=== Поиск по ID  ===")
+
+	var id uint64 = 9957123
+	result := dbr.Find(id)
+
+	//Запись: 3957 Привет 3957!  0
+	//EmptyValue:  EmptyID: 0
+
+	if result.Exist() {
+		_ = result.Decode(&Record)
+		fmt.Println("Запись:", Record.ID, Record.Value, Record.EmptyValue, Record.EmptyID) //Record.Slice, Record.Map
+		fmt.Println("EmptyValue:", Record.EmptyValue, "EmptyID:", Record.EmptyID)
+	} else {
+		fmt.Printf("Запись c ID = %d не найдена!\n\r", id)
+	}
+
+	fmt.Println("=== Проход по диапазону (С 1 и ПО 5 запись) ===")
+
+	for row := range dbr.GetRange(10000, 10005) {
+		if row.Exist() {
+			_ = row.Decode(&Record)
+			//fmt.Println(Record)
+			fmt.Println("ID:", Record.ID, "EmptyValue:", Record.EmptyValue, "EmptyID:", Record.EmptyID)
+		}
+	}
 
 	t.Log("Все ОК")
 

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math/big"
+	"reflect"
 	"time"
 )
 
@@ -61,6 +63,101 @@ func (t *BinaryTree) Insert(key uint64, data DataItem) error {
 		},
 		0,
 	)
+}
+
+// InsertDefaultNull добавляет новый элемент в дерево по ключу, только если он не пустой
+func (t *BinaryTree) InsertDefaultNull(key uint64, data DataItem) error {
+	// Фильтруем пустые значения перед вставкой
+	filteredData := filterEmptyFields(data)
+	t.totalNodes = 0
+	t.totalSize++
+	return t.root.insert(
+		insertOps{
+			key:        key,
+			prefixBits: 64,
+			rType:      recordData,
+			mergeFunc: func(value DataItem) MergeFunc {
+				return func(_ DataItem) (DataItem, error) {
+					return value, nil
+				}
+			}(filteredData),
+			storage: t.storage,
+		},
+		0,
+	)
+}
+
+// Функция проверки на "пустоту" значения
+func isEmptyValue(v DataItem) bool {
+	if v == nil {
+		return true
+	}
+
+	switch val := v.(type) {
+	case DataString:
+		return val == ""
+	case DataBytes:
+		return len(val) == 0
+	case DataUint16, DataUint32, DataUint64, DataInt32:
+		return reflect.ValueOf(val).Uint() == 0
+	case DataFloat32, DataFloat64:
+		return reflect.ValueOf(val).Float() == 0
+	case DataBool:
+		return !bool(val)
+	case *DataUint128:
+		return val == nil || (*big.Int)(val).BitLen() == 0
+	case DataMap:
+		return len(val) == 0
+	case DataSlice:
+		return len(val) == 0
+	default:
+		return false
+	}
+}
+
+// Рекурсивно фильтрует пустые поля в структуре данных
+func filterEmptyFields(data DataItem) DataItem {
+	if data == nil {
+		return nil
+	}
+
+	switch v := data.(type) {
+	case DataMap:
+		filtered := make(DataMap)
+		for key, val := range v {
+			if !isEmptyValue(val) {
+				filteredVal := filterEmptyFields(val)
+				if !isEmptyValue(filteredVal) {
+					filtered[key] = filteredVal
+				}
+			}
+		}
+		if len(filtered) == 0 {
+			return nil
+		}
+		return filtered
+
+	case DataSlice:
+		filtered := make(DataSlice, 0, len(v))
+		for _, item := range v {
+			if !isEmptyValue(item) {
+				filteredItem := filterEmptyFields(item)
+				if !isEmptyValue(filteredItem) {
+					filtered = append(filtered, filteredItem)
+				}
+			}
+		}
+		if len(filtered) == 0 {
+			return nil
+		}
+		return filtered
+
+	default:
+		if isEmptyValue(v) {
+			return nil
+		}
+		return v
+	}
 }
 
 // Find ищет элемент в дереве по ключу

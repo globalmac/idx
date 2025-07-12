@@ -2,7 +2,7 @@ package writer
 
 import (
 	"fmt"
-	"github.com/globalmac/idx"
+	"github.com/globalmac/idx/encrypt"
 	"math/big"
 	"os"
 	"strconv"
@@ -98,8 +98,10 @@ func TestCreateFileAndInsertSecure(t *testing.T) {
 		}
 
 		var record = DataMap{
-			"id":    DataUint64(i),
-			"value": DataString("Привет " + str + "!"),
+			"id":          DataUint64(i),
+			"value":       DataString("Привет " + str + "!"),
+			"empty_value": DataString(""),
+			"empty_id":    DataUint64(0),
 			"data": DataMap{
 				"detail": DataMap{
 					"id":      DataUint64(i),
@@ -136,17 +138,72 @@ func TestCreateFileAndInsertSecure(t *testing.T) {
 		}
 
 		db.Insert(i, record)
+		//db.InsertDefaultNull(i, record)
 
 	}
 
 	db.Serialize(dbFile)
 
-	err := idx.EncryptDB(fn, "./../test.db.enc", "0ih7iDiipucs9AqNOHf")
+	err := encrypt.EncryptDB(fn, "./../test.db.enc", "0ih7iDiipucs9AqNOHf")
 	if err != nil {
 		fmt.Println("Ошибка шифрования и архивации файл БД:", err)
 		return
 	}
 
 	os.Remove(fn)
+
+}
+
+func TestCreateFileAndInsertDefaultNull(t *testing.T) {
+
+	var fn = "./../test3.db"
+	dbFile, _ := os.Create(fn)
+	defer dbFile.Close()
+
+	db, _ := New(
+		Config{
+			Name: "Название БД",
+		},
+	)
+
+	var i uint64
+	for i = 1; i <= 10_000_000; i++ {
+
+		var str = strconv.Itoa(int(i))
+
+		var record = DataMap{
+			"id":          DataUint64(i),
+			"value":       DataString("Привет " + str + "!"),
+			"empty_value": DataString(""),
+			"empty_id":    DataUint64(0),
+			"slice": DataSlice{
+				//DataUint64(1),
+				DataString("Привет слайс" + str + "!"),
+				DataBytes{1, 2, 3, 4},
+				DataUint64(i),
+			},
+			"map": DataMap{
+				"item_1": DataMap{
+					"id":    DataUint16(1),
+					"value": DataString("Счастье"),
+				},
+				"item_2": DataMap{
+					"id":    DataUint16(2),
+					"value": DataString("Счастье 2"),
+				},
+				"item_3": DataMap{
+					"id":    DataUint16(3),
+					"value": DataString("Счастье 3"),
+				},
+			},
+		}
+
+		db.InsertDefaultNull(i, record)
+
+	}
+
+	db.Serialize(dbFile)
+
+	//os.Remove(fn)
 
 }

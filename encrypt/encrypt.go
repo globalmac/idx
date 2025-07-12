@@ -1,4 +1,4 @@
-package idx
+package encrypt
 
 import (
 	"archive/tar"
