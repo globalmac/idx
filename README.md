@@ -273,7 +273,7 @@ func main() {
 
 	if result.Exist() {
 		_ = result.Decode(&Record)
-		fmt.Println("Запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
+		fmt.Println("Ключ:", result.Id, "Значения:", Record.ID, Record.Value, Record.Slice, Record.Map)
 	} else {
 		fmt.Printf("Запись c ID = %d не найдена!\n\r", id)
 	}
@@ -285,7 +285,7 @@ func main() {
 	for row := range dbr.GetAll() {
 		if row.Exist() {
 			_ = row.Decode(&Record)
-			fmt.Println(Record.ID, Record.Value, Record.Slice, Record.Map)
+			fmt.Println("Ключ:", row.Id, "Значения:", Record.ID, Record.Value, Record.Slice, Record.Map)
 		}
 	}
 
@@ -296,7 +296,7 @@ func main() {
 	for row := range dbr.GetRange(1, 5) {
 		if row.Exist() {
 			_ = row.Decode(&Record)
-			fmt.Println(Record.ID, Record.Value, Record.Slice, Record.Map)
+			fmt.Println("Ключ:", row.Id, "Значения:", Record.ID, Record.Value, Record.Slice, Record.Map)
 		}
 	}
 
@@ -306,7 +306,7 @@ func main() {
 
 	dbr.Where([]any{"value"}, "=", "Привет это значение - 25", func(result reader.Result) bool {
 		if err = result.Decode(&Record); err == nil {
-			fmt.Println("Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
+			fmt.Println("Ключ:", result.Id, "Найдена запись:", Record.ID, Record.Value, Record.Slice, Record.Map)
 			return false // Если нужно вернуть первое вхождение, иначе вернет все найденные записи
 		}
 		return true

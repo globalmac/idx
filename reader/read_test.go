@@ -526,3 +526,46 @@ func TestReadFileWithNulled(t *testing.T) {
 	t.Log("Все ОК")
 
 }
+
+func TestReadWithID(t *testing.T) {
+
+	var cfn = "./../test4.db"
+
+	dbr, err := Open(cfn)
+	if err != nil {
+		t.Error("Ошибка чтения БД:", err)
+	}
+	defer dbr.Close()
+
+	fmt.Println("=== Данные о БД ===")
+	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total)
+
+	var Record string
+
+	///
+
+	fmt.Println("=== Поиск по ID  ===")
+
+	var id uint64 = 995712
+	result := dbr.Find(id)
+
+	if result.Exist() {
+		_ = result.Decode(&Record)
+		fmt.Println("Запись:", Record, result.Id)
+		//fmt.Println("Запись:", Record.ID, Record.Value, Record.EmptyValue, Record.EmptyID) //Record.Slice, Record.Map
+	} else {
+		fmt.Printf("Запись c ID = %d не найдена!\n\r", id)
+	}
+
+	fmt.Println("=== Проход по диапазону (С 1 и ПО 5 запись) ===")
+
+	for row := range dbr.GetRange(10000, 10005) {
+		if row.Exist() {
+			_ = row.Decode(&Record)
+			fmt.Println("ID:", row.Id, "Value:", Record)
+		}
+	}
+
+	t.Log("Все ОК")
+
+}

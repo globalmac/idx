@@ -207,3 +207,32 @@ func TestCreateFileAndInsertDefaultNull(t *testing.T) {
 	//os.Remove(fn)
 
 }
+
+func TestCreateFileWithID(t *testing.T) {
+
+	var fn = "./../test4.db"
+	dbFile, _ := os.Create(fn)
+	defer dbFile.Close()
+
+	db, _ := New(
+		Config{
+			Name: "Название БД",
+		},
+	)
+
+	var i uint64
+	for i = 1; i <= 1_000_000; i++ {
+
+		var str = strconv.Itoa(int(i))
+
+		var record = DataString("Привет " + str + "!")
+
+		db.InsertDefaultNull(i, record)
+
+	}
+
+	db.Serialize(dbFile)
+
+	//os.Remove(fn)
+
+}

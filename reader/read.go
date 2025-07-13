@@ -43,7 +43,7 @@ type treeNode struct {
 }
 
 type Result struct {
-	id     uint64
+	Id     uint64
 	err    error
 	dc     dc
 	offset uint
@@ -188,7 +188,7 @@ func (r *Reader) Find(id uint64) Result {
 	if node == nodeCount {
 		// Запись не найдена
 		return Result{
-			id:     id,
+			Id:     id,
 			offset: notFound,
 		}
 	} else if node > nodeCount {
@@ -196,7 +196,7 @@ func (r *Reader) Find(id uint64) Result {
 		offset, err := r.resolveDataPointer(node)
 		return Result{
 			dc:     r.dc,
-			id:     id,
+			Id:     id,
 			offset: uint(offset),
 			err:    err,
 		}
@@ -258,7 +258,7 @@ func (r *Reader) Where(path []any, mode string, fieldValue interface{}, yield fu
 				if compareFn(valOffset) {
 					if !yield(Result{
 						dc:     r.dc,
-						id:     nodeID,
+						Id:     nodeID,
 						offset: offset,
 					}) {
 						return
@@ -659,7 +659,7 @@ func (r *Reader) Scan(id uint64, prefixLen uint8) iter.Seq[Result] {
 					offset, err := r.resolveDataPointer(node.pointer)
 					ok := yield(Result{
 						dc:     r.dc,
-						id:     node.id,
+						Id:     node.id,
 						offset: uint(offset),
 						err:    err,
 					})
@@ -733,7 +733,7 @@ func (r *Reader) GetRange(start, end uint64) iter.Seq[Result] {
 					offset, err := r.resolveDataPointer(node)
 					if !yield(Result{
 						dc:     r.dc,
-						id:     netStart,
+						Id:     netStart,
 						offset: uint(offset),
 						//prefixLen: bit,
 						err: err,
@@ -826,6 +826,13 @@ func (r Result) Decode(v any) error {
 	_, err := r.dc.decode(r.offset, rv, 0)
 	return err
 }
+
+/*func (r Result) ID() uint64 {
+	if r.Exist() {
+		return r.Id
+	}
+	return 0
+}*/
 
 func (r Result) DecodePath(v any, path ...any) error {
 	if r.err != nil {
