@@ -225,7 +225,11 @@ func TestCreateFileWithID(t *testing.T) {
 
 		var str = strconv.Itoa(int(i))
 
-		var record = DataString("Привет " + str + "!")
+		//var record = DataString("Привет " + str + "!")
+		var record = DataSlice{
+			DataString("Привет " + str + "!"),
+			DataUint64(i),
+		}
 
 		db.InsertDefaultNull(i, record)
 

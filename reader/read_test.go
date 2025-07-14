@@ -540,31 +540,27 @@ func TestReadWithID(t *testing.T) {
 	fmt.Println("=== Данные о БД ===")
 	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total)
 
-	var Record string
+	//var Record string
+	var Record []any
 
 	///
+	fmt.Println("=== Where ===")
 
-	fmt.Println("=== Поиск по ID  ===")
-
-	var id uint64 = 995712
-	result := dbr.Find(id)
-
-	if result.Exist() {
-		_ = result.Decode(&Record)
-		fmt.Println("Запись:", Record, result.Id)
-		//fmt.Println("Запись:", Record.ID, Record.Value, Record.EmptyValue, Record.EmptyID) //Record.Slice, Record.Map
-	} else {
-		fmt.Printf("Запись c ID = %d не найдена!\n\r", id)
-	}
-
-	fmt.Println("=== Проход по диапазону (С 1 и ПО 5 запись) ===")
-
-	for row := range dbr.GetRange(10000, 10005) {
-		if row.Exist() {
-			_ = row.Decode(&Record)
-			fmt.Println("ID:", row.Id, "Value:", Record)
+	dbr.WhereHas("Привет 10000!", func(result Result) bool {
+		if err := result.Decode(&Record); err == nil {
+			fmt.Println("Ключ:", result.Id, "Запись:", Record)
+			return false
 		}
-	}
+		return true
+	})
+
+	/*dbr.Where([]any{-1}, "=", 105, func(result Result) bool {
+		if err := result.Decode(&Record); err == nil {
+			fmt.Println("Ключ:", result.Id, "Запись:", Record)
+			return false
+		}
+		return true
+	})*/
 
 	t.Log("Все ОК")
 

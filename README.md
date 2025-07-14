@@ -316,11 +316,13 @@ func main() {
 
 ```
 
-### Reader: поиск внутри значения (метод Where)
+### Reader: поиск внутри значения (метод Where / WhereHas)
 
 Удобный, расширенный и быстрый поиск внутри структуры значений.
 
 Поддерживаются операции: "=", "!=", "<", ">", "IN", "LIKE", "ILIKE".
+
+WhereHas - ищет значение напрямую.
 
 ```go
 package main
@@ -440,11 +442,29 @@ dbr.Where([]any{"slice", 0}, ">", 3, func(result reader.Result) bool {})
 // В слайсе по ключу 2 (DataUint64)
 dbr.Where([]any{"slice", 2}, "<", 3, func(result reader.Result) bool {})
 
-// IN - поддерживает []string, []int и []uin
-//t64
+// IN - поддерживает []string, []int и []uint64
 dbr.Where([]any{"value"},  "IN", []string{"Привет", "Текст", "Выход"}, func(result reader.Result) bool {})
 dbr.Where([]any{"id"},     "IN", []int{111, 77777, 510777}, func(result reader.Result) bool {})
 dbr.Where([]any{"big_id"}, "IN", []uint64int{111123, 77777000, 510777000}, func(result reader.Result) bool {})
+
+// Если нет мапы или среза и результат записывается напрямую:
+var record = writer.DataSlice{
+	writer.DataString("Текст 1"),
+	writer.DataString("Текст 2"),
+	writer.DataString("Текст 3"),
+}
+//...
+var Record []string // При чтении, если смесь - []any
+
+dbr.WhereHas("Текст 2", func(result Result) bool {})
+dbr.WhereHas(123, func(result Result) bool {})
+
+// Поиск в любом элементе и вложенности карты/среза
+// Карта = "*"
+dbr.Where([]any{"*"}, "=", "Привет 100!", func(result Result) bool {})
+// Срез = -1
+dbr.Where([]any{-1}, "=", 100100, func(result Result) bool {})
+
 
 ```
 

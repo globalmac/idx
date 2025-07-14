@@ -215,8 +215,20 @@ func (r *Reader) GetAll() iter.Seq[Result] {
 
 // Where ищет записи по вложенному пути и значению с заданным режимом сравнения.
 func (r *Reader) Where(path []any, mode string, fieldValue interface{}, yield func(Result) bool) {
+
 	if r.buffer == nil || len(path) == 0 {
 		return
+	}
+
+	// Поиск по всем элементам среза
+	if len(path) == 1 {
+		if sliceIndex, ok := path[0].(int); ok && sliceIndex == -1 {
+			r.searchAllInSlice(fieldValue, mode, yield)
+			return
+		} else if mapKey, okm := path[0].(string); okm && mapKey == "*" {
+			r.searchAllInMap(fieldValue, mode, yield)
+			return
+		}
 	}
 
 	compareFn := makeComparePathFn(r.dc, fieldValue, mode)
@@ -260,6 +272,127 @@ func (r *Reader) Where(path []any, mode string, fieldValue interface{}, yield fu
 						dc:     r.dc,
 						Id:     nodeID,
 						offset: offset,
+					}) {
+						return
+					}
+				}
+			}
+			continue
+		}
+
+		if stackSize+2 < len(stack) {
+			offset := node * offsetMult
+			leftPointer := r.nodeReader.readLeft(offset)
+			rightPointer := r.nodeReader.readRight(offset)
+
+			rightID := nodeID | (1 << (63 - bit))
+			nextBit := bit + 1
+
+			stack[stackSize] = struct {
+				node   uint
+				nodeID uint64
+				bit    uint8
+			}{node: rightPointer, nodeID: rightID, bit: nextBit}
+			stackSize++
+
+			stack[stackSize] = struct {
+				node   uint
+				nodeID uint64
+				bit    uint8
+			}{node: leftPointer, nodeID: nodeID, bit: nextBit}
+			stackSize++
+		}
+	}
+}
+
+// WhereHas ищет записи по точному значению узла (без пути)
+func (r *Reader) WhereHas(fieldValue interface{}, yield func(Result) bool) {
+	if r.buffer == nil {
+		return
+	}
+
+	// Создаем функцию сравнения для конкретного типа
+	compareFn := func(offset uint) bool {
+		// Определяем тип данных по фактическому значению
+		switch v := fieldValue.(type) {
+		case string:
+			var val string
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == v
+		case float64:
+			var val float64
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == v
+		case float32:
+			var val float32
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == v
+		case int:
+			var val int64
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == int64(v)
+		case bool:
+			var val bool
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == v
+		case []byte:
+			var val []byte
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && bytes.Equal(val, v)
+		case uint16:
+			var val uint16
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == v
+		case uint32:
+			var val uint32
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == v
+		case uint64:
+			var val uint64
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val == v
+		case *big.Int:
+			var val big.Int
+			_, err := r.dc.decode(offset, reflect.ValueOf(&val), 0)
+			return err == nil && val.Cmp(v) == 0
+		default:
+			return false
+		}
+	}
+
+	var stack [128]struct {
+		node   uint
+		nodeID uint64
+		bit    uint8
+	}
+	stackSize := 1
+	stack[0] = struct {
+		node   uint
+		nodeID uint64
+		bit    uint8
+	}{node: 0, nodeID: 0, bit: 0}
+
+	nodeCount := r.Metadata.NodeCount
+	offsetMult := r.nodeOffsetMult
+
+	for stackSize > 0 {
+		stackSize--
+		item := stack[stackSize]
+		node, nodeID, bit := item.node, item.nodeID, item.bit
+
+		if node >= nodeCount {
+			if node > nodeCount {
+				dataOffset, err := r.resolveDataPointer(node)
+				if err != nil {
+					continue
+				}
+
+				// Проверяем само значение узла (не путь)
+				if compareFn(uint(dataOffset)) {
+					if !yield(Result{
+						dc:     r.dc,
+						Id:     nodeID,
+						offset: uint(dataOffset),
 					}) {
 						return
 					}
@@ -604,7 +737,7 @@ func findInMap(dc dc, offset uint, key string) (uint, error) {
 			return 0, err
 		}
 	}
-	return 0, errors.New("Ключа нет в Map")
+	return 0, errors.New("ключа нет в Map")
 }
 
 // findInSlice ищет индекс в Slice
@@ -623,6 +756,193 @@ func findInSlice(dc dc, offset uint, index uint) (uint, error) {
 		}
 	}
 	return curr, nil
+}
+
+// searchAllInSlice ищет заданное значение во всех значениях Slice
+func (r *Reader) searchAllInSlice(fieldValue interface{}, mode string, yield func(Result) bool) {
+	compareFn := makeComparePathFn(r.dc, fieldValue, mode)
+	if compareFn == nil {
+		return
+	}
+
+	var stack [128]struct {
+		node   uint
+		nodeID uint64
+		bit    uint8
+	}
+	stackSize := 1
+	stack[0] = struct {
+		node   uint
+		nodeID uint64
+		bit    uint8
+	}{node: 0, nodeID: 0, bit: 0}
+
+	nodeCount := r.Metadata.NodeCount
+	offsetMult := r.nodeOffsetMult
+
+	for stackSize > 0 {
+		stackSize--
+		item := stack[stackSize]
+		node, nodeID, bit := item.node, item.nodeID, item.bit
+
+		if node >= nodeCount {
+			if node > nodeCount {
+				dataOffset, err := r.resolveDataPointer(node)
+				if err != nil {
+					continue
+				}
+				offset := uint(dataOffset)
+
+				// Исправленный вызов decodeCtrlData с передачей всех параметров
+				typeNum, size, newOffset, err := r.dc.decodeCtrlData(offset)
+				if err != nil || typeNum != writer.TypeSlice {
+					continue
+				}
+
+				// Проверяем все элементы среза
+				curr := newOffset
+				for i := uint(0); i < size; i++ {
+					if compareFn(curr) {
+						if !yield(Result{
+							dc:     r.dc,
+							Id:     nodeID,
+							offset: offset,
+						}) {
+							return
+						}
+						break
+					}
+
+					// Получаем смещение следующего элемента
+					nextOffset, err := r.dc.nextValueOffset(curr, 1)
+					if err != nil {
+						break
+					}
+					curr = nextOffset
+				}
+			}
+			continue
+		}
+
+		if stackSize+2 < len(stack) {
+			offset := node * offsetMult
+			leftPointer := r.nodeReader.readLeft(offset)
+			rightPointer := r.nodeReader.readRight(offset)
+
+			rightID := nodeID | (1 << (63 - bit))
+			nextBit := bit + 1
+
+			stack[stackSize] = struct {
+				node   uint
+				nodeID uint64
+				bit    uint8
+			}{node: rightPointer, nodeID: rightID, bit: nextBit}
+			stackSize++
+
+			stack[stackSize] = struct {
+				node   uint
+				nodeID uint64
+				bit    uint8
+			}{node: leftPointer, nodeID: nodeID, bit: nextBit}
+			stackSize++
+		}
+	}
+}
+
+// searchAllInMap ищет заданное значение во всех значениях Map (не только по ключам)
+func (r *Reader) searchAllInMap(fieldValue interface{}, mode string, yield func(Result) bool) {
+	compareFn := makeComparePathFn(r.dc, fieldValue, mode)
+	if compareFn == nil {
+		return
+	}
+
+	var stack [128]struct {
+		node   uint
+		nodeID uint64
+		bit    uint8
+	}
+	stackSize := 1
+	stack[0] = struct {
+		node   uint
+		nodeID uint64
+		bit    uint8
+	}{node: 0, nodeID: 0, bit: 0}
+
+	nodeCount := r.Metadata.NodeCount
+	offsetMult := r.nodeOffsetMult
+
+	for stackSize > 0 {
+		stackSize--
+		item := stack[stackSize]
+		node, nodeID, bit := item.node, item.nodeID, item.bit
+
+		if node >= nodeCount {
+			if node > nodeCount {
+				dataOffset, err := r.resolveDataPointer(node)
+				if err != nil {
+					continue
+				}
+				offset := uint(dataOffset)
+
+				typeNum, size, newOffset, err := r.dc.decodeCtrlData(offset)
+				if err != nil || typeNum != writer.TypeMap {
+					continue
+				}
+
+				// Проверяем все значения Map (пропускаем ключи)
+				curr := newOffset
+				for i := uint(0); i < size; i++ {
+					// Пропускаем ключ
+					_, valOffset, err := r.dc.decodeKey(curr)
+					if err != nil {
+						break
+					}
+
+					// Проверяем значение
+					if compareFn(valOffset) {
+						if !yield(Result{
+							dc:     r.dc,
+							Id:     nodeID,
+							offset: offset,
+						}) {
+							return
+						}
+						break
+					}
+
+					// Переходим к следующей паре ключ-значение
+					curr, err = r.dc.nextValueOffset(valOffset, 1)
+					if err != nil {
+						break
+					}
+				}
+			}
+			continue
+		}
+
+		if stackSize+2 < len(stack) {
+			offset := node * offsetMult
+			leftPointer := r.nodeReader.readLeft(offset)
+			rightPointer := r.nodeReader.readRight(offset)
+
+			rightID := nodeID | (1 << (63 - bit))
+			nextBit := bit + 1
+
+			stack[stackSize] = struct {
+				node   uint
+				nodeID uint64
+				bit    uint8
+			}{node: rightPointer, nodeID: rightID, bit: nextBit}
+			stackSize++
+
+			stack[stackSize] = struct {
+				node   uint
+				nodeID uint64
+				bit    uint8
+			}{node: leftPointer, nodeID: nodeID, bit: nextBit}
+			stackSize++
+		}
+	}
 }
 
 ///
