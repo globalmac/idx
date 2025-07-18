@@ -194,6 +194,23 @@ func (r *Reader) CheckPartition(id uint64) (bool, bool, string, error) {
 	return false, false, "", fmt.Errorf("значение %d не найдено ни в одной из партиций", id)
 }
 
+// GetAllPartitionsFiles возвращает список всех файлов партиции с форматированием
+func (r *Reader) GetAllPartitionsFiles(pathStart string, pathSeparator string, pathEnd string) ([]string, error) {
+
+	files := []string{""}
+
+	if r.buffer == nil {
+		return nil, errors.New("БД недоступна для чтения")
+	}
+
+	if r.Metadata.Partitions.Ranges != nil {
+		for _, part := range r.Metadata.Partitions.Ranges {
+			files = append(files, pathStart+pathSeparator+fmt.Sprint(part.Part)+pathSeparator+pathEnd)
+		}
+	}
+	return files, nil
+}
+
 // Find возвращает 1 узел
 func (r *Reader) Find(id uint64) Result {
 	if r.buffer == nil {
