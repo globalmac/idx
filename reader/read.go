@@ -3,6 +3,7 @@ package reader
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/globalmac/idx/writer"
 	"io"
 	"iter"
@@ -157,6 +158,40 @@ func (r *Reader) Close() error {
 	}
 	r.buffer = nil
 	return err
+}
+
+// CheckPartition смотрит вхождение диапазонов в открытом файле и если нет - возвращает партицию, где есть вхождение
+func (r *Reader) CheckPartition(id uint64) (bool, bool, string, error) {
+	if r.buffer == nil {
+		return false, false, "", errors.New("БД недоступна для чтения")
+	}
+
+	ranges := r.Metadata.Partitions.Ranges
+	n := len(ranges)
+	if n == 0 {
+		return false, false, "", errors.New("пустой массив партиций")
+	}
+
+	// Проверка граничных значений для быстрого выхода
+	if id < ranges[0].Min {
+		return false, false, "", fmt.Errorf("значение %d находится ниже минимального диапазона", id)
+	}
+	if id > ranges[n-1].Max {
+		return false, false, "", fmt.Errorf("значение %d находится выше максимального диапазона", id)
+	}
+
+	// Линейный поиск
+	for _, rr := range ranges {
+		if id >= rr.Min && id <= rr.Max {
+			var sp = fmt.Sprint(rr.Part)
+			if r.Metadata.Partitions.Current == rr.Part {
+				return true, true, sp, nil
+			}
+			return true, false, sp, nil
+		}
+	}
+
+	return false, false, "", fmt.Errorf("значение %d не найдено ни в одной из партиций", id)
 }
 
 // Find возвращает 1 узел

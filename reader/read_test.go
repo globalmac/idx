@@ -573,3 +573,79 @@ func TestReadWithID(t *testing.T) {
 	t.Log("Все ОК")
 
 }
+
+func TestReadPartitions(t *testing.T) {
+
+	var cfn = "./../part_2.db"
+
+	dbr, err := Open(cfn)
+	if err != nil {
+		t.Error("Ошибка чтения БД:", err)
+	}
+	defer dbr.Close()
+
+	fmt.Println("=== Данные о БД ===")
+
+	fmt.Println(
+		"Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"),
+		"Кол-во узлов:", dbr.Metadata.NodeCount,
+		"Кол-во данных:", dbr.Metadata.Total,
+		"Кол-во партиций:", dbr.Metadata.Partitions.Total,
+		"Текущая партиция:", dbr.Metadata.Partitions.Current,
+		"Партиции:", dbr.Metadata.Partitions.Ranges,
+	)
+
+	found1, partIncurrentDB, partName, _ := dbr.CheckPartition(1)
+
+	if !found1 {
+		t.Error("Тест 1 - Провален!")
+	}
+	if found1 && partIncurrentDB {
+		t.Error("Тест 2 - Провален!")
+	}
+	if found1 && partName != "1" {
+		t.Error("Тест 3 - Провален!")
+	}
+
+	///
+
+	found2, _, _, _ := dbr.CheckPartition(4999)
+	if !found2 {
+		t.Error("Тест 4 - Провален!")
+	}
+
+	///
+	var fid uint64 = 1
+	found3, currentPartition, strPartition, _ := dbr.CheckPartition(fid)
+	if !found3 {
+		t.Error("Тест 4 - Провален!")
+	}
+	if found3 && !currentPartition {
+
+		dbr.Close()
+
+		dbr2, err := Open("./../part_" + strPartition + ".db")
+		if err != nil {
+			t.Error("Ошибка чтения БД:", err)
+		}
+		defer dbr2.Close()
+
+		fmt.Println("=== Данные о БД в другой партиции (" + strPartition + ") ===")
+
+		fmt.Println(dbr2.Metadata.Partitions)
+
+		var result = dbr2.Find(fid)
+		var Record []any
+
+		if result.Exist() {
+			_ = result.Decode(&Record)
+			fmt.Println("Запись в партиции #", strPartition, ":", Record)
+		} else {
+			fmt.Printf("Запись c ID = %d не найдена!\n\r", fid)
+		}
+
+	}
+
+	t.Log("Все ОК")
+
+}

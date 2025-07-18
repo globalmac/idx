@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/big"
 	"reflect"
+	"sort"
 	"time"
 )
 
@@ -24,13 +25,13 @@ type Config struct {
 }
 
 type PartitionsConfig struct {
-	Current int                `idx:"current"` // Текущая партиция
-	Total   int                `idx:"total"`   // Общее количество партиций
+	Current uint64             `idx:"current"` // Текущая партиция
+	Total   uint64             `idx:"total"`   // Общее количество партиций
 	Ranges  []PartitionsRanges `idx:"ranges"`  // Метаданные партиций
 }
 
 type PartitionsRanges struct {
-	Part uint32 `idx:"part"`
+	Part uint64 `idx:"part"`
 	Min  uint64 `idx:"min"`
 	Max  uint64 `idx:"max"`
 }
@@ -60,6 +61,53 @@ func New(cfg Config) (*BinaryTree, error) {
 	//tree.nodeSize = 32
 
 	return tree, nil
+}
+
+// CreatePartitions формирует партиции исходя из ключей + сортировка
+func CreatePartitions(keys []uint64, parts int) []PartitionsRanges {
+
+	if len(keys) == 0 || parts <= 0 || len(keys) < parts {
+		return nil
+	}
+
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	total := len(keys)
+	chunkSize := total / parts
+	result := make([]PartitionsRanges, 0, parts)
+
+	for i := 0; i < parts; i++ {
+
+		start := i * chunkSize
+		end := start + chunkSize
+		if i == parts-1 {
+			end = total
+		}
+
+		if start >= total {
+			break
+		}
+
+		minK := keys[start]
+		maxK := keys[end-1]
+
+		result = append(result, PartitionsRanges{
+			Part: uint64(i + 1),
+			Min:  minK,
+			Max:  maxK,
+		})
+	}
+
+	return result
+}
+
+func GetPartition(key uint64, parts []PartitionsRanges) uint64 {
+	for _, p := range parts {
+		if p.Min <= key && key <= p.Max {
+			return p.Part
+		}
+	}
+	return 0
 }
 
 // Insert добавляет новый элемент в дерево по ключу

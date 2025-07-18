@@ -214,24 +214,9 @@ func TestCreateFileWithID(t *testing.T) {
 	dbFile, _ := os.Create(fn)
 	defer dbFile.Close()
 
-	parts := 5
-	metas := make([]PartitionsRanges, 0, parts)
-	for i := 0; i < parts; i++ {
-		metas = append(metas, PartitionsRanges{
-			Part: uint32(i + 1),
-			Min:  uint64(1),
-			Max:  uint64(i * 2),
-		})
-	}
-
 	db, _ := New(
 		Config{
-			Name: "БД с партициями",
-			Partitions: &PartitionsConfig{
-				Current: 1,
-				Total:   parts,
-				Ranges:  metas,
-			},
+			Name: "БД",
 		},
 	)
 
@@ -251,6 +236,71 @@ func TestCreateFileWithID(t *testing.T) {
 	}
 
 	db.Serialize(dbFile)
+
+	//os.Remove(fn)
+
+}
+
+func TestCreatePartitionFile(t *testing.T) {
+
+	ids := []uint64{
+		1, 2, 3,
+		4, 5,
+		10, 15,
+		100, 150, 151,
+		1000, 1001, 5000,
+	}
+
+	// 3 партиции
+	parts := 3
+	ranges := CreatePartitions(ids, parts)
+
+	// Берём все партиции
+	for _, r := range ranges {
+
+		fmt.Println(r.Part)
+
+		var pn = strconv.Itoa(int(r.Part))
+
+		var fn = "./../part_" + pn + ".db"
+		dbFile, _ := os.Create(fn)
+		defer dbFile.Close()
+
+		var db, _ = New(
+			Config{
+				Name: "БД с партициями",
+				Partitions: &PartitionsConfig{
+					Current: r.Part,
+					Total:   uint64(parts),
+					Ranges:  ranges,
+				},
+			},
+		)
+
+		// Берём все ID
+		for _, id := range ids {
+
+			var partition = GetPartition(id, ranges)
+
+			if partition == r.Part {
+
+				var str = strconv.Itoa(int(id))
+
+				db.Insert(id, DataSlice{
+					DataString("Привет " + str + "!"),
+					DataUint64(id),
+					DataUint64(partition),
+				})
+
+				fmt.Println("---", id, partition)
+
+			}
+
+		}
+
+		db.Serialize(dbFile)
+
+	}
 
 	//os.Remove(fn)
 
