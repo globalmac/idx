@@ -205,7 +205,7 @@ func (r *Reader) GetAllPartitionsFiles(pathStart string, pathSeparator string, p
 
 	if r.Metadata.Partitions.Ranges != nil {
 		for _, part := range r.Metadata.Partitions.Ranges {
-			files = append(files, pathStart+pathSeparator+fmt.Sprint(part.Part)+pathSeparator+pathEnd)
+			files = append(files, pathStart+pathSeparator+fmt.Sprint(part.Part)+pathEnd)
 		}
 	}
 	return files, nil
