@@ -17,9 +17,22 @@ var (
 
 // Config содержит настройки для создания бинарного дерева
 type Config struct {
-	Timestamp int64       // Временная метка
-	Name      string      // Название БД
-	KeyHasher KeyHashFunc // Функция хеширования ключей
+	Timestamp  int64             // Временная метка
+	Name       string            // Название БД
+	KeyHasher  KeyHashFunc       // Функция хеширования ключей
+	Partitions *PartitionsConfig // Новое поле для партиций
+}
+
+type PartitionsConfig struct {
+	Current int                `idx:"current"` // Текущая партиция
+	Total   int                `idx:"total"`   // Общее количество партиций
+	Ranges  []PartitionsRanges `idx:"ranges"`  // Метаданные партиций
+}
+
+type PartitionsRanges struct {
+	Part uint32 `idx:"part"`
+	Min  uint64 `idx:"min"`
+	Max  uint64 `idx:"max"`
 }
 
 // New создает новое бинарное дерево с заданной конфигурацией
@@ -33,6 +46,10 @@ func New(cfg Config) (*BinaryTree, error) {
 
 	if cfg.Timestamp != 0 {
 		tree.timestamp = cfg.Timestamp
+	}
+
+	if cfg.Partitions != nil {
+		tree.partitions = cfg.Partitions
 	}
 
 	if cfg.Name != "" {

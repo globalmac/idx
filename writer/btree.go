@@ -16,6 +16,7 @@ type BinaryTree struct {
 	totalNodes int      // Общее количество узлов
 	depth      int      // Глубина дерева
 	totalSize  int      // Общее кол-во элементов в записи
+	partitions *PartitionsConfig
 }
 
 // prepare подготавливает дерево к сериализации
@@ -128,11 +129,39 @@ func (t *BinaryTree) writeMetadata(ds *dataSerializer) (int64, error) {
 	if t.totalNodes > math.MaxUint32 {
 		return 0, fmt.Errorf("кол-во узлов %d превысило максимум", t.totalNodes)
 	}
+
+	// Подготавливаем данные о партициях
+	var partitionsData DataMap
+	if t.partitions != nil {
+		// Конвертируем массив PartitionMeta в DataSlice
+		ranges := make(DataSlice, 0, len(t.partitions.Ranges))
+		for _, r := range t.partitions.Ranges {
+			ranges = append(ranges, DataMap{
+				"part": DataUint32(r.Part),
+				"min":  DataUint64(r.Min),
+				"max":  DataUint64(r.Max),
+			})
+		}
+
+		partitionsData = DataMap{
+			"current": DataUint32(t.partitions.Current),
+			"total":   DataUint32(t.partitions.Total),
+			"ranges":  ranges,
+		}
+	} /*else {
+		partitionsData = DataMap{
+			"current": DataUint32(0),
+			"total":   DataUint32(0),
+			"ranges":  DataSlice{},
+		}
+	}*/
+
 	meta := DataMap{
 		"created_at": DataUint64(t.timestamp),
 		"name":       DataString(t.name),
 		"node_count": DataUint32(t.totalNodes),
 		"data_count": DataUint32(t.totalSize),
+		"partitions": partitionsData,
 	}
 	return meta.Serialize(ds)
 }

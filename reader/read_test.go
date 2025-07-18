@@ -17,7 +17,7 @@ func TestReadFile(t *testing.T) {
 	defer dbr.Close()
 
 	fmt.Println("=== Данные о БД ===")
-	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total)
+	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total, "Кол-во партиций:", dbr.Metadata.Partitions.Total, "Партиции:", dbr.Metadata.Partitions.Ranges)
 
 	var Record struct {
 		ID    uint64         `idx:"id"`
@@ -82,7 +82,7 @@ func TestReadFileSecure(t *testing.T) {
 	defer dbr.Close()
 
 	fmt.Println("=== Данные о БД ===")
-	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total)
+	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total, "Текущая партиция:", dbr.Metadata.Partitions.Current, "Кол-во партиций:", dbr.Metadata.Partitions.Total, "Партиции:", dbr.Metadata.Partitions.Ranges)
 
 	var Record struct {
 		ID   uint64 `idx:"id"`
@@ -470,7 +470,7 @@ func TestReadFileWithNulled(t *testing.T) {
 	defer dbr.Close()
 
 	fmt.Println("=== Данные о БД ===")
-	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total)
+	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total, "Текущая партиция:", dbr.Metadata.Partitions.Current, "Кол-во партиций:", dbr.Metadata.Partitions.Total, "Партиции:", dbr.Metadata.Partitions.Ranges)
 
 	var Record struct {
 		ID         uint64 `idx:"id"`
@@ -538,7 +538,15 @@ func TestReadWithID(t *testing.T) {
 	defer dbr.Close()
 
 	fmt.Println("=== Данные о БД ===")
-	fmt.Println("Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"), "Кол-во узлов:", dbr.Metadata.NodeCount, "Кол-во данных:", dbr.Metadata.Total)
+
+	fmt.Println(
+		"Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"),
+		"Кол-во узлов:", dbr.Metadata.NodeCount,
+		"Кол-во данных:", dbr.Metadata.Total,
+		"Кол-во партиций:", dbr.Metadata.Partitions.Total,
+		"Текущая партиция:", dbr.Metadata.Partitions.Current,
+		"Партиции:", dbr.Metadata.Partitions.Ranges,
+	)
 
 	//var Record string
 	var Record []any

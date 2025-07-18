@@ -214,9 +214,24 @@ func TestCreateFileWithID(t *testing.T) {
 	dbFile, _ := os.Create(fn)
 	defer dbFile.Close()
 
+	parts := 5
+	metas := make([]PartitionsRanges, 0, parts)
+	for i := 0; i < parts; i++ {
+		metas = append(metas, PartitionsRanges{
+			Part: uint32(i + 1),
+			Min:  uint64(1),
+			Max:  uint64(i * 2),
+		})
+	}
+
 	db, _ := New(
 		Config{
-			Name: "Название БД",
+			Name: "БД с партициями",
+			Partitions: &PartitionsConfig{
+				Current: 1,
+				Total:   parts,
+				Ranges:  metas,
+			},
 		},
 	)
 

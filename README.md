@@ -469,3 +469,7 @@ dbr.Where([]any{-1}, "=", 100100, func(result Result) bool {})
 ```
 
 Больше примеров поиска в `/reader/read_test.go => TestReadFileSecure()`
+
+### Партиционирование
+
+Скоро будет документация...

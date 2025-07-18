@@ -28,10 +28,11 @@ type Reader struct {
 }
 
 type Metadata struct {
-	Name       string `idx:"name"`
-	BuildEpoch uint   `idx:"created_at"`
-	NodeCount  uint   `idx:"node_count"`
-	Total      uint   `idx:"data_count"`
+	Name       string                  `idx:"name"`
+	BuildEpoch uint                    `idx:"created_at"`
+	NodeCount  uint                    `idx:"node_count"`
+	Total      uint                    `idx:"data_count"`
+	Partitions writer.PartitionsConfig `idx:"partitions"`
 }
 
 type K3dt byte
