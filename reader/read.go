@@ -998,64 +998,77 @@ func (r *Reader) searchAllInMap(fieldValue interface{}, mode string, yield func(
 	}
 }
 
-///
-
 func (r *Reader) Scan(id uint64, prefixLen uint8) iter.Seq[Result] {
 	return func(yield func(Result) bool) {
-
 		stopBit := int(prefixLen)
 		if stopBit > 64 {
 			stopBit = 64
 		}
 
+		// Используем стек для обхода дерева
+		type stackNode struct {
+			pointer uint
+			id      uint64
+			bit     int
+		}
+
+		// Начинаем с корневого узла
 		pointer, bit := r.traverseTree(id, 0, stopBit)
+		stack := []stackNode{{pointer: pointer, id: id, bit: bit}}
 
-		mask := uint64(0xFFFFFFFF) << (64 - bit)
-		network := id & mask
+		for len(stack) > 0 {
+			// Извлекаем узел из стека
+			node := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
 
-		nodes := []treeNode{{
-			id:      network,
-			bit:     uint(bit),
-			pointer: pointer,
-		}}
-
-		for len(nodes) > 0 {
-			node := nodes[len(nodes)-1]
-			nodes = nodes[:len(nodes)-1]
-
+			// Обрабатываем текущий узел
 			for {
 				if node.pointer == r.Metadata.NodeCount {
-					break
+					break // Пустой узел
 				}
 
 				if node.pointer > r.Metadata.NodeCount {
+					// Листовой узел с данными
 					offset, err := r.resolveDataPointer(node.pointer)
-					ok := yield(Result{
+					if err != nil {
+						if !yield(Result{err: err}) {
+							return
+						}
+						break
+					}
+
+					// Формируем ID аналогично Where
+					nodeID := node.id
+					if node.bit < 64 {
+						nodeID |= 1 << (63 - node.bit)
+					}
+
+					if !yield(Result{
 						dc:     r.dc,
-						Id:     node.id,
+						Id:     nodeID,
 						offset: uint(offset),
-						err:    err,
-					})
-					if !ok {
+					}) {
 						return
 					}
 					break
 				}
 
-				// Создаем правую ветку с установленным битом
-				idRight := node.id | (1 << (62 - node.bit))
-
+				// Получаем дочерние узлы
 				offset := node.pointer * r.nodeOffsetMult
+				leftPointer := r.nodeReader.readLeft(offset)
 				rightPointer := r.nodeReader.readRight(offset)
 
-				node.bit++
-				nodes = append(nodes, treeNode{
+				// Добавляем правый узел в стек
+				rightID := node.id | (1 << (63 - node.bit))
+				stack = append(stack, stackNode{
 					pointer: rightPointer,
-					id:      idRight,
-					bit:     node.bit,
+					id:      rightID,
+					bit:     node.bit + 1,
 				})
 
-				node.pointer = r.nodeReader.readLeft(offset)
+				// Продолжаем с левым узлом
+				node.pointer = leftPointer
+				node.bit++
 			}
 		}
 	}

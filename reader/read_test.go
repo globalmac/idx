@@ -551,10 +551,22 @@ func TestReadWithID(t *testing.T) {
 	//var Record string
 	var Record []any
 
-	///
-	fmt.Println("=== Where ===")
+	c := 0
+	for row := range dbr.GetAll() {
+		if row.Exist() {
+			_ = row.Decode(&Record)
+			fmt.Println(row.Id, Record)
+			if c >= 100 {
+				break
+			}
+			c++
+		}
+	}
 
-	dbr.WhereHas("Привет 10000!", func(result Result) bool {
+	///
+	/*fmt.Println("=== Where ===")
+
+	dbr.WhereHas("Привет 1000!", func(result Result) bool {
 		if err := result.Decode(&Record); err == nil {
 			fmt.Println("Ключ:", result.Id, "Запись:", Record)
 			return false
