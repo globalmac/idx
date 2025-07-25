@@ -305,3 +305,75 @@ func TestCreatePartitionFile(t *testing.T) {
 	//os.Remove(fn)
 
 }
+
+func TestArr(t *testing.T) {
+
+	var fn = "./../test5.db"
+	dbFile, _ := os.Create(fn)
+	defer dbFile.Close()
+
+	db, _ := New(
+		Config{
+			Name: "БД",
+		},
+	)
+
+	var i uint64
+	for i = 1; i <= 1_000_000; i++ {
+
+		var str = strconv.Itoa(int(i))
+
+		var record = DataSlice{
+			DataMap{
+				"id":   DataUint64(i),
+				"type": DataString("sample"),
+				"row": DataMap{
+					"row1": DataString("row_" + str),
+					"row2": DataString("row_" + str),
+					"row3": DataString("row_" + str),
+				},
+				"slice": DataSlice{
+					DataString("Привет слайс" + str + "!"),
+					DataBytes{1, 2, 3, 4},
+					DataUint64(i + 1),
+				},
+			},
+			DataMap{
+				"id":   DataUint64(i),
+				"type": DataString("sample2"),
+				"row": DataMap{
+					"row1": DataString("row2_" + str),
+					"row2": DataString("row2_" + str),
+					"row3": DataString("row2_" + str),
+				},
+				"slice": DataSlice{
+					DataString("Привет row 2 слайс" + str + "!"),
+					DataBytes{1, 2, 3, 4},
+					DataUint64(i + 2),
+				},
+			},
+			DataMap{
+				"id":   DataUint64(i),
+				"type": DataString("sample3"),
+				"row": DataMap{
+					"row1": DataString("row3_" + str),
+					"row2": DataString("row3_" + str),
+					"row3": DataString("row3_" + str),
+				},
+				"slice": DataSlice{
+					DataString("Привет row 3 слайс" + str + "!"),
+					DataBytes{1, 2, 3, 4},
+					DataUint64(i + 3),
+				},
+			},
+		}
+
+		db.InsertDefaultNull(i, record)
+
+	}
+
+	db.Serialize(dbFile)
+
+	//os.Remove(fn)
+
+}

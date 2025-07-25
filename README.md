@@ -464,7 +464,12 @@ dbr.WhereHas(123, func(result Result) bool {})
 dbr.Where([]any{"*"}, "=", "Привет 100!", func(result Result) bool {})
 // Срез = -1
 dbr.Where([]any{-1}, "=", 100100, func(result Result) bool {})
-
+// Поиск по полю в первом элементе среза
+db.WhereRecursive([]any{0, "surname"}, "=", "test", yield)
+// Поиск по полю во всех элементах среза
+db.WhereRecursive([]any{-1, "name"}, "=", "test", yield)
+// Поиск по значению в любом поле структуры
+db.WhereRecursive([]any{-1, "slice", -1}, "=", "test", yield)
 
 ```
 

@@ -1,6 +1,7 @@
 package reader
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/globalmac/idx/encrypt"
 	"math/big"
@@ -657,6 +658,52 @@ func TestReadPartitions(t *testing.T) {
 		}
 
 	}
+
+	t.Log("Все ОК")
+
+}
+
+func TestReadArr(t *testing.T) {
+
+	var cfn = "./../test5.db"
+
+	dbr, err := Open(cfn)
+	if err != nil {
+		t.Error("Ошибка чтения БД:", err)
+	}
+	defer dbr.Close()
+
+	fmt.Println("=== Данные о БД ===")
+
+	fmt.Println(
+		"Дата создания:", time.Unix(int64(dbr.Metadata.BuildEpoch), 0).Format("2006-01-02 в 15:01:05"),
+		"Кол-во узлов:", dbr.Metadata.NodeCount,
+		"Кол-во данных:", dbr.Metadata.Total,
+	)
+
+	var Records []struct {
+		Id   uint64 `idx:"id"`
+		Type string `idx:"type"`
+		Row  struct {
+			Row1 string `idx:"row1"`
+			Row2 string `idx:"row2"`
+			Row3 string `idx:"row3"`
+		} `idx:"row"`
+		Slice []any `idx:"slice"`
+	}
+
+	//dbr.WhereInSlice([]any{-1, "row", "row2"}, "=", "row_7771", func(result Result) bool {
+	//dbr.WhereInSlice([]any{-1, "id"}, "=", 10001, func(result Result) bool {
+	//dbr.WhereInSlice([]any{-1, "slice", 2}, "=", 1231, func(result Result) bool {
+	//dbr.WhereInSlice([]any{-1, "row", "row1"}, "=", "row_11232", func(result Result) bool {
+	dbr.WhereInSlice([]any{-1, "type"}, "ILIKE", "le2", func(result Result) bool {
+		if err := result.Decode(&Records); err == nil {
+			prettyJSON, _ := json.MarshalIndent(Records, "", "  ")
+			fmt.Println(string(prettyJSON))
+			return false
+		}
+		return true
+	})
 
 	t.Log("Все ОК")
 

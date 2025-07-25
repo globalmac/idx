@@ -12,6 +12,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -356,6 +357,235 @@ func (r *Reader) Where(path []any, mode string, fieldValue interface{}, yield fu
 			stackSize++
 		}
 	}
+}
+
+// WhereInSlice улучшенная версия поиска по вложенным массивам
+func (r *Reader) WhereInSlice(path []any, mode string, fieldValue interface{}, yield func(Result) bool) {
+	if r.buffer == nil {
+		return
+	}
+
+	compareFn := makeComparePathFn(r.dc, fieldValue, mode)
+	if compareFn == nil {
+		return
+	}
+
+	var stack [128]struct {
+		node   uint
+		nodeID uint64
+		bit    uint8
+	}
+	stackSize := 1
+	stack[0] = struct {
+		node   uint
+		nodeID uint64
+		bit    uint8
+	}{node: 0, nodeID: 0, bit: 0}
+
+	nodeCount := r.Metadata.NodeCount
+	offsetMult := r.nodeOffsetMult
+
+	for stackSize > 0 {
+		stackSize--
+		item := stack[stackSize]
+		node, nodeID, bit := item.node, item.nodeID, item.bit
+
+		if node >= nodeCount {
+			if node > nodeCount {
+				dataOffset, err := r.resolveDataPointer(node)
+				if err != nil {
+					continue
+				}
+				offset := uint(dataOffset)
+
+				// Новый метод для поиска по пути с поддержкой срезов
+				found, err := r.searchByPathWithSlices(offset, path, compareFn)
+				if err != nil {
+					continue
+				}
+
+				if found {
+					if !yield(Result{
+						dc:     r.dc,
+						Id:     nodeID,
+						offset: offset,
+					}) {
+						return
+					}
+				}
+			}
+			continue
+		}
+
+		if stackSize+2 < len(stack) {
+			offset := node * offsetMult
+			leftPointer := r.nodeReader.readLeft(offset)
+			rightPointer := r.nodeReader.readRight(offset)
+
+			rightID := nodeID | (1 << (63 - bit))
+			nextBit := bit + 1
+
+			stack[stackSize] = struct {
+				node   uint
+				nodeID uint64
+				bit    uint8
+			}{node: rightPointer, nodeID: rightID, bit: nextBit}
+			stackSize++
+
+			stack[stackSize] = struct {
+				node   uint
+				nodeID uint64
+				bit    uint8
+			}{node: leftPointer, nodeID: nodeID, bit: nextBit}
+			stackSize++
+		}
+	}
+}
+
+func (r *Reader) searchByPathWithSlices(offset uint, path []any, compareFn func(uint) bool) (bool, error) {
+	currentOffset := offset
+
+	for i, elem := range path {
+		typeNum, size, newOffset, err := r.dc.decodeCtrlData(currentOffset)
+		if err != nil {
+			return false, err
+		}
+
+		switch v := elem.(type) {
+		case string:
+			if typeNum != writer.TypeMap {
+				return false, nil
+			}
+
+			found := false
+			curr := newOffset
+			for i := uint(0); i < size; i++ {
+				key, valOffset, err := r.dc.decodeKey(curr)
+				if err != nil {
+					return false, err
+				}
+
+				if string(key) == v {
+					currentOffset = valOffset
+					found = true
+					break
+				}
+
+				curr, err = r.dc.nextValueOffset(valOffset, 1)
+				if err != nil {
+					return false, err
+				}
+			}
+
+			if !found {
+				return false, nil
+			}
+
+		case int:
+			if typeNum == writer.TypeSlice {
+				// Обработка среза
+				if v == -1 {
+					// Рекурсивный поиск в оставшемся пути
+					if i+1 < len(path) {
+						return r.searchInAllSliceElements(newOffset, size, path[i+1:], compareFn)
+					}
+					return r.searchInAllSliceElementsSimple(newOffset, size, compareFn)
+				}
+
+				if uint(v) >= size {
+					return false, nil
+				}
+
+				currentOffset, err = r.getSliceElementOffset(newOffset, v)
+				if err != nil {
+					return false, err
+				}
+
+			} else if typeNum == writer.TypeMap {
+				// Обработка случая, когда Record имеет числовые ключи
+				strKey := strconv.Itoa(v)
+				found := false
+				curr := newOffset
+				for i := uint(0); i < size; i++ {
+					key, valOffset, err := r.dc.decodeKey(curr)
+					if err != nil {
+						return false, err
+					}
+
+					if string(key) == strKey {
+						currentOffset = valOffset
+						found = true
+						break
+					}
+
+					curr, err = r.dc.nextValueOffset(valOffset, 1)
+					if err != nil {
+						return false, err
+					}
+				}
+
+				if !found {
+					return false, nil
+				}
+			} else {
+				return false, nil
+			}
+
+		default:
+			return false, nil
+		}
+	}
+
+	return compareFn(currentOffset), nil
+}
+
+func (r *Reader) getSliceElementOffset(offset uint, index int) (uint, error) {
+	curr := offset
+	for i := 0; i < index; i++ {
+		var err error
+		curr, err = r.dc.nextValueOffset(curr, 1)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return curr, nil
+}
+
+func (r *Reader) searchInAllSliceElements(offset uint, size uint, remainingPath []any, compareFn func(uint) bool) (bool, error) {
+	curr := offset
+	for i := uint(0); i < size; i++ {
+		found, err := r.searchByPathWithSlices(curr, remainingPath, compareFn)
+		if err != nil {
+			return false, err
+		}
+		if found {
+			return true, nil
+		}
+
+		curr, err = r.dc.nextValueOffset(curr, 1)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return false, nil
+}
+
+func (r *Reader) searchInAllSliceElementsSimple(offset uint, size uint, compareFn func(uint) bool) (bool, error) {
+	curr := offset
+	for i := uint(0); i < size; i++ {
+		if compareFn(curr) {
+			return true, nil
+		}
+
+		var err error
+		curr, err = r.dc.nextValueOffset(curr, 1)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return false, nil
 }
 
 // WhereHas ищет записи по точному значению узла (без пути)
